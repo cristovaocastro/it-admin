@@ -1,0 +1,40 @@
+diff --git a/node_modules/@ldapjs/dn/lib/utils/escape-value.js b/node_modules/@ldapjs/dn/lib/utils/escape-value.js
+index d9ccf98..4aea477 100644
+--- a/node_modules/@ldapjs/dn/lib/utils/escape-value.js
++++ b/node_modules/@ldapjs/dn/lib/utils/escape-value.js
+@@ -49,28 +49,25 @@ module.exports = function escapeValue (value) {
+     }
+ 
+     if (charHex >= 0xc0 && charHex <= 0xdf) {
+-      // Represents the first byte in a 2-byte UTF-8 character.
+-      escaped.push(toEscapedHexString(charHex))
+-      escaped.push(toEscapedHexString(toEscape[i + 1]))
++      // Represents the first byte in a 2-byte UTF-8 character. Active Directory does not
++      // reliably reassemble multi-byte \XX\XX hex escapes back into the original character
++      // (see https://www.rfc-editor.org/rfc/rfc4514#section-2.4 — escaping non-ASCII UTF-8
++      // characters is legal but not required), so emit the literal decoded character instead.
++      escaped.push(toEscape.subarray(i, i + 2).toString('utf8'))
+       i += 2
+       continue
+     }
+ 
+     if (charHex >= 0xe0 && charHex <= 0xef) {
+       // Represents the first byte in a 3-byte UTF-8 character.
+-      escaped.push(toEscapedHexString(charHex))
+-      escaped.push(toEscapedHexString(toEscape[i + 1]))
+-      escaped.push(toEscapedHexString(toEscape[i + 2]))
++      escaped.push(toEscape.subarray(i, i + 3).toString('utf8'))
+       i += 3
+       continue
+     }
+ 
+     if (charHex >= 0xf0 && charHex <= 0xf7) {
+       // Represents the first byte in a 4-byte UTF-8 character.
+-      escaped.push(toEscapedHexString(charHex))
+-      escaped.push(toEscapedHexString(toEscape[i + 1]))
+-      escaped.push(toEscapedHexString(toEscape[i + 2]))
+-      escaped.push(toEscapedHexString(toEscape[i + 3]))
++      escaped.push(toEscape.subarray(i, i + 4).toString('utf8'))
+       i += 4
+       continue
+     }
