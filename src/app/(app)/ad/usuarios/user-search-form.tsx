@@ -10,7 +10,11 @@ export function UserSearchForm({ connectionId, defaultQuery }: { connectionId: s
       <input type="hidden" name="conexao" value={connectionId} />
       <div className="min-w-[220px] flex-1 space-y-1.5">
         <label className="text-xs font-medium text-muted-foreground">Buscar</label>
-        <Input name="q" defaultValue={defaultQuery ?? ""} placeholder="login, nome ou e-mail..." />
+        <Input
+          name="q"
+          defaultValue={defaultQuery ?? ""}
+          placeholder="login, nome, e-mail, departamento, cargo ou descrição..."
+        />
       </div>
       <Button type="submit" variant="outline">
         <Search className="size-4" />

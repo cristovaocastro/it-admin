@@ -127,4 +127,22 @@
   html {
     @apply font-sans;
   }
+
+  /* Tabelas largas rolam horizontalmente (ver components/ui/table.tsx); em macOS/trackpads a barra
+     de rolagem "overlay" padrão só aparece durante o gesto de scroll, o que faz colunas extras
+     parecerem inacessíveis. Forçamos uma barra sempre visível para deixar isso óbvio. */
+  [data-slot="table-container"] {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  [data-slot="table-container"]::-webkit-scrollbar {
+    height: 10px;
+  }
+  [data-slot="table-container"]::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  [data-slot="table-container"]::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+  }
 }

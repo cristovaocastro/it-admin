@@ -10,8 +10,10 @@ import {
   escapeDnValue,
   escapeFilterValue,
   encodeAdPassword,
+  encodeAccountExpires,
   rdnOf,
   parseWindowsFileTime,
+  parseAccountExpires,
 } from "@/lib/ad/util";
 
 const USER_ATTRIBUTES = [
@@ -32,6 +34,7 @@ const USER_ATTRIBUTES = [
   "department",
   "title",
   "description",
+  "accountExpires",
 ];
 
 function toUserSummary(entry: Record<string, unknown>): AdUserSummary {
@@ -53,6 +56,8 @@ function toUserSummary(entry: Record<string, unknown>): AdUserSummary {
     enabled: isUacEnabled(uac),
     locked: lockoutTime !== "0",
     passwordExpired: entry.pwdLastSet === "0",
+    passwordNeverExpires: (uac & UAC.DONT_EXPIRE_PASSWORD) !== 0,
+    accountExpires: parseAccountExpires(entry.accountExpires as string | undefined)?.toISOString(),
     whenCreated: entry.whenCreated ? String(entry.whenCreated) : undefined,
     lastLogon: parseWindowsFileTime(entry.lastLogonTimestamp as string | undefined)?.toISOString(),
     memberOf: memberOf.map(String),
@@ -73,7 +78,7 @@ export async function searchAdUsers(config: AdConnectionConfig, params: SearchUs
   let filter = "(&(objectCategory=person)(objectClass=user))";
   if (params.query?.trim()) {
     const q = escapeFilterValue(params.query.trim());
-    filter = `(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=*${q}*)(cn=*${q}*)(displayName=*${q}*)(mail=*${q}*)))`;
+    filter = `(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=*${q}*)(cn=*${q}*)(displayName=*${q}*)(mail=*${q}*)(department=*${q}*)(title=*${q}*)(description=*${q}*)))`;
   }
 
   return withAdClient(config, async (client) => {
@@ -82,6 +87,7 @@ export async function searchAdUsers(config: AdConnectionConfig, params: SearchUs
       filter,
       attributes: USER_ATTRIBUTES,
       sizeLimit: limit,
+      paged: true, // AD limita buscas não paginadas a 1000 resultados por padrão
     });
     return entries.map(toUserSummary).sort((a, b) => a.sAMAccountName.localeCompare(b.sAMAccountName));
   });
@@ -213,6 +219,40 @@ export async function setAdUserEnabled(config: AdConnectionConfig, dn: string, e
       new ldap.Change({
         operation: "replace",
         modification: { type: "userAccountControl", values: [String(newUac)] },
+      })
+    );
+  });
+}
+
+export async function setAdUserPasswordNeverExpires(config: AdConnectionConfig, dn: string, neverExpires: boolean) {
+  return withAdClient(config, async (client) => {
+    const entries = await ldapSearch(client, dn, {
+      scope: "base",
+      filter: "(objectClass=user)",
+      attributes: ["userAccountControl"],
+    });
+    if (entries.length === 0) throw new AdOperationError("Usuário não encontrado no AD.");
+    const currentUac = Number(entries[0].userAccountControl ?? UAC.NORMAL_ACCOUNT);
+    const newUac = neverExpires ? currentUac | UAC.DONT_EXPIRE_PASSWORD : currentUac & ~UAC.DONT_EXPIRE_PASSWORD;
+    await ldapModify(
+      client,
+      dn,
+      new ldap.Change({
+        operation: "replace",
+        modification: { type: "userAccountControl", values: [String(newUac)] },
+      })
+    );
+  });
+}
+
+export async function setAdUserAccountExpires(config: AdConnectionConfig, dn: string, expiresAt: Date | null) {
+  return withAdClient(config, async (client) => {
+    await ldapModify(
+      client,
+      dn,
+      new ldap.Change({
+        operation: "replace",
+        modification: { type: "accountExpires", values: [encodeAccountExpires(expiresAt)] },
       })
     );
   });

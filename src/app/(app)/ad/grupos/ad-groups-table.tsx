@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -21,6 +22,12 @@ import type { AdGroupSummary } from "@/lib/ad/types";
 import { deleteAdGroupAction, moveAdGroupAction } from "@/lib/actions/ad-groups-actions";
 import { GroupMembersDialog } from "./group-members-dialog";
 import { MoveObjectDialog } from "../move-object-dialog";
+
+const SCOPE_LABEL: Record<AdGroupSummary["scope"], string> = {
+  DomainLocal: "Domínio local",
+  Global: "Global",
+  Universal: "Universal",
+};
 
 export function DeleteAdGroupButton({
   connectionId,
@@ -79,6 +86,8 @@ export function AdGroupsTable({ groups, connectionId }: { groups: AdGroupSummary
       <TableHeader>
         <TableRow>
           <TableHead>Nome</TableHead>
+          <TableHead>Tipo</TableHead>
+          <TableHead>Escopo</TableHead>
           <TableHead>Descrição</TableHead>
           <TableHead>Membros</TableHead>
           <TableHead className="text-right">Ações</TableHead>
@@ -88,7 +97,15 @@ export function AdGroupsTable({ groups, connectionId }: { groups: AdGroupSummary
         {groups.map((g) => (
           <TableRow key={g.dn}>
             <TableCell className="font-medium">{g.name}</TableCell>
-            <TableCell className="text-muted-foreground">{g.description || "—"}</TableCell>
+            <TableCell>
+              <Badge variant={g.security ? "secondary" : "outline"}>
+                {g.security ? "Segurança" : "Distribuição"}
+              </Badge>
+            </TableCell>
+            <TableCell className="text-muted-foreground">{SCOPE_LABEL[g.scope]}</TableCell>
+            <TableCell className="max-w-[220px] truncate text-muted-foreground" title={g.description}>
+              {g.description || "—"}
+            </TableCell>
             <TableCell className="text-muted-foreground">{g.memberCount}</TableCell>
             <TableCell>
               <div className="flex items-center justify-end gap-0.5">
@@ -106,7 +123,7 @@ export function AdGroupsTable({ groups, connectionId }: { groups: AdGroupSummary
         ))}
         {groups.length === 0 && (
           <TableRow>
-            <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+            <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
               Nenhum grupo encontrado.
             </TableCell>
           </TableRow>

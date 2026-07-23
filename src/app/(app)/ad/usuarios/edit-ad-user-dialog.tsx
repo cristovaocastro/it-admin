@@ -15,10 +15,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { SubmitButton } from "@/components/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Pencil } from "lucide-react";
 import type { AdUserSummary } from "@/lib/ad/types";
+
+function toDateInputValue(iso?: string) {
+  return iso ? iso.slice(0, 10) : "";
+}
 
 export function EditAdUserDialog({
   connectionId,
@@ -95,6 +100,22 @@ export function EditAdUserDialog({
               <Label htmlFor="description">Descrição</Label>
               <Input id="description" name="description" defaultValue={user.description} />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="accountExpires">Conta expira em</Label>
+              <Input
+                id="accountExpires"
+                name="accountExpires"
+                type="date"
+                defaultValue={toDateInputValue(user.accountExpires)}
+              />
+              <p className="text-xs text-muted-foreground">Deixe em branco para nunca expirar.</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <Label htmlFor="passwordNeverExpires" className="text-sm">
+              Senha nunca expira
+            </Label>
+            <Switch id="passwordNeverExpires" name="passwordNeverExpires" defaultChecked={user.passwordNeverExpires} />
           </div>
           <DialogFooter>
             <SubmitButton pendingText="Salvando...">Salvar alterações</SubmitButton>

@@ -14,6 +14,8 @@ import {
   ShieldCheck,
   Monitor,
   FolderTree,
+  Flame,
+  ListFilter,
 } from "lucide-react";
 
 type NavItem = {
@@ -46,6 +48,13 @@ const NAV: NavGroup[] = [
       { href: "/ad/usuarios", label: "Usuários AD", icon: UserCog, roles: ["ADMIN", "OPERATOR"] },
       { href: "/ad/grupos", label: "Grupos AD", icon: UsersRound, roles: ["ADMIN", "OPERATOR"] },
       { href: "/ad/computadores", label: "Computadores", icon: Monitor, roles: ["ADMIN", "OPERATOR"] },
+    ],
+  },
+  {
+    title: "Firewall",
+    items: [
+      { href: "/firewall/conexoes", label: "Conexões", icon: Flame, roles: ["ADMIN"] },
+      { href: "/firewall/uri-lists", label: "URI Lists", icon: ListFilter, roles: ["ADMIN"] },
     ],
   },
 ];

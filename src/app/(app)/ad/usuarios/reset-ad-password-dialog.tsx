@@ -76,6 +76,12 @@ export function ResetAdPasswordDialog({
             </Label>
             <Switch id="forceChangeAtNextLogon" name="forceChangeAtNextLogon" defaultChecked />
           </div>
+          <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <Label htmlFor="unlockAccount" className="text-sm">
+              Desbloquear conta
+            </Label>
+            <Switch id="unlockAccount" name="unlockAccount" defaultChecked={user.locked} />
+          </div>
           <DialogFooter>
             <SubmitButton pendingText="Salvando...">Redefinir senha</SubmitButton>
           </DialogFooter>

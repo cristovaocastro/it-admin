@@ -40,16 +40,22 @@ export type AdUserSummary = {
   enabled: boolean;
   locked: boolean;
   passwordExpired: boolean;
+  passwordNeverExpires: boolean;
+  accountExpires?: string; // ISO date; undefined = nunca expira
   whenCreated?: string;
   lastLogon?: string;
   memberOf: string[];
 };
+
+export type AdGroupScope = "DomainLocal" | "Global" | "Universal";
 
 export type AdGroupSummary = {
   dn: string;
   name: string;
   description?: string;
   memberCount: number;
+  scope: AdGroupScope;
+  security: boolean; // true = grupo de segurança, false = grupo de distribuição
 };
 
 export type AdGroupDetail = AdGroupSummary & {

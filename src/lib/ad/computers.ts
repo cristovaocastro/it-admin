@@ -44,7 +44,7 @@ export async function searchAdComputers(config: AdConnectionConfig, params: Sear
   let filter = "(objectCategory=computer)";
   if (params.query?.trim()) {
     const q = escapeFilterValue(params.query.trim());
-    filter = `(&(objectCategory=computer)(|(cn=*${q}*)(dNSHostName=*${q}*)(operatingSystem=*${q}*)))`;
+    filter = `(&(objectCategory=computer)(|(cn=*${q}*)(dNSHostName=*${q}*)(operatingSystem=*${q}*)(description=*${q}*)))`;
   }
 
   return withAdClient(config, async (client) => {
@@ -53,6 +53,7 @@ export async function searchAdComputers(config: AdConnectionConfig, params: Sear
       filter,
       attributes: COMPUTER_ATTRIBUTES,
       sizeLimit: limit,
+      paged: true, // AD limita buscas não paginadas a 1000 resultados por padrão
     });
     return entries.map(toComputerSummary).sort((a, b) => a.name.localeCompare(b.name));
   });

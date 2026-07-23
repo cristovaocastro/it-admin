@@ -9,6 +9,8 @@ import {
   createAdUser,
   setAdUserPassword,
   setAdUserEnabled,
+  setAdUserPasswordNeverExpires,
+  setAdUserAccountExpires,
   unlockAdUser,
   updateAdUser,
   deleteAdUser,
@@ -85,6 +87,7 @@ const resetPasswordSchema = z.object({
   label: z.string().min(1),
   password: z.string().min(8, "A senha precisa ter ao menos 8 caracteres."),
   forceChangeAtNextLogon: z.coerce.boolean().default(true),
+  unlockAccount: z.coerce.boolean().default(false),
 });
 
 export async function resetAdUserPasswordAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -92,13 +95,17 @@ export async function resetAdUserPasswordAction(_prev: ActionState, formData: Fo
   const parsed = resetPasswordSchema.safeParse({
     ...Object.fromEntries(formData),
     forceChangeAtNextLogon: formData.get("forceChangeAtNextLogon") === "on",
+    unlockAccount: formData.get("unlockAccount") === "on",
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
   const config = await loadAdConnectionConfig(parsed.data.connectionId);
-  const result = await withAdErrorHandling(() =>
-    setAdUserPassword(config, parsed.data.dn, parsed.data.password, parsed.data.forceChangeAtNextLogon)
-  );
+  const result = await withAdErrorHandling(async () => {
+    await setAdUserPassword(config, parsed.data.dn, parsed.data.password, parsed.data.forceChangeAtNextLogon);
+    if (parsed.data.unlockAccount) {
+      await unlockAdUser(config, parsed.data.dn);
+    }
+  });
 
   await logAudit({
     actor: { id: actor.id, name: actor.username },
@@ -109,8 +116,8 @@ export async function resetAdUserPasswordAction(_prev: ActionState, formData: Fo
     description:
       "error" in result
         ? `Falha ao redefinir senha do usuário AD "${parsed.data.label}": ${result.error}`
-        : `Senha do usuário AD "${parsed.data.label}" redefinida`,
-    metadata: { connectionId: parsed.data.connectionId },
+        : `Senha do usuário AD "${parsed.data.label}" redefinida${parsed.data.unlockAccount ? " e conta desbloqueada" : ""}`,
+    metadata: { connectionId: parsed.data.connectionId, unlockAccount: parsed.data.unlockAccount },
     status: "error" in result ? "FAILURE" : "SUCCESS",
   });
 
@@ -187,16 +194,27 @@ const updateSchema = z.object({
   department: z.string().optional(),
   title: z.string().optional(),
   description: z.string().optional(),
+  passwordNeverExpires: z.coerce.boolean().default(false),
+  accountExpires: z.string().optional(), // "" ou ausente = nunca expira; senão data YYYY-MM-DD
 });
 
 export async function updateAdUserAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const actor = await requireRole(["ADMIN", "OPERATOR"]);
-  const parsed = updateSchema.safeParse(Object.fromEntries(formData));
+  const parsed = updateSchema.safeParse({
+    ...Object.fromEntries(formData),
+    passwordNeverExpires: formData.get("passwordNeverExpires") === "on",
+  });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
   const config = await loadAdConnectionConfig(parsed.data.connectionId);
-  const { connectionId, dn, ...fields } = parsed.data;
-  const result = await withAdErrorHandling(() => updateAdUser(config, dn, fields));
+  const { connectionId, dn, passwordNeverExpires, accountExpires, ...fields } = parsed.data;
+  const expiresAt = accountExpires ? new Date(`${accountExpires}T23:59:59`) : null;
+
+  const result = await withAdErrorHandling(async () => {
+    await updateAdUser(config, dn, fields);
+    await setAdUserPasswordNeverExpires(config, dn, passwordNeverExpires);
+    await setAdUserAccountExpires(config, dn, expiresAt);
+  });
 
   await logAudit({
     actor: { id: actor.id, name: actor.username },
@@ -208,7 +226,7 @@ export async function updateAdUserAction(_prev: ActionState, formData: FormData)
       "error" in result
         ? `Falha ao atualizar atributos do usuário AD: ${result.error}`
         : `Atributos do usuário AD atualizados`,
-    metadata: { connectionId, fields },
+    metadata: { connectionId, fields, passwordNeverExpires, accountExpires: accountExpires || null },
     status: "error" in result ? "FAILURE" : "SUCCESS",
   });
 

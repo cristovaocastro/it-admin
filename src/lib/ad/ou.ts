@@ -13,6 +13,7 @@ export async function listOrganizationalUnits(config: AdConnectionConfig): Promi
       filter: "(objectClass=organizationalUnit)",
       attributes: ["distinguishedName", "ou"],
       sizeLimit: 500,
+      paged: true,
     });
     return entries
       .map((e) => ({

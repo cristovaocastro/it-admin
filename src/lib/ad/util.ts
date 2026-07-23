@@ -72,3 +72,19 @@ export function parseWindowsFileTime(value?: string): Date | undefined {
   const ms = Number(ticks / BigInt(10000)) - WINDOWS_EPOCH_OFFSET_MS;
   return new Date(ms);
 }
+
+// accountExpires usa "0" (nunca definido) OU o valor máximo de int64 como sentinelas de "nunca expira"
+// — o AD/ADUC grava o valor máximo quando o admin escolhe "Never" na tela de expiração de conta.
+const ACCOUNT_NEVER_EXPIRES = "9223372036854775807";
+
+export function parseAccountExpires(value?: string): Date | undefined {
+  if (!value || value === "0" || value === ACCOUNT_NEVER_EXPIRES) return undefined;
+  return parseWindowsFileTime(value);
+}
+
+/** Codifica uma data de expiração de conta no formato FILETIME do AD; `null` grava o sentinela "nunca expira". */
+export function encodeAccountExpires(date: Date | null): string {
+  if (!date) return ACCOUNT_NEVER_EXPIRES;
+  const ticks = (BigInt(date.getTime()) + BigInt(WINDOWS_EPOCH_OFFSET_MS)) * BigInt(10000);
+  return ticks.toString();
+}

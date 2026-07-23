@@ -18,6 +18,7 @@ export async function listChildContainers(
       filter: "(|(objectClass=organizationalUnit)(objectClass=container))",
       attributes: ["distinguishedName", "ou", "cn", "objectClass"],
       sizeLimit: 1000,
+      paged: true,
     });
     return entries
       .map((e) => {

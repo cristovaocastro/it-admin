@@ -10,7 +10,11 @@ export function ComputerSearchForm({ connectionId, defaultQuery }: { connectionI
       <input type="hidden" name="conexao" value={connectionId} />
       <div className="min-w-[220px] flex-1 space-y-1.5">
         <label className="text-xs font-medium text-muted-foreground">Buscar</label>
-        <Input name="q" defaultValue={defaultQuery ?? ""} placeholder="nome, host ou sistema operacional..." />
+        <Input
+          name="q"
+          defaultValue={defaultQuery ?? ""}
+          placeholder="nome, host, sistema operacional ou descrição..."
+        />
       </div>
       <Button type="submit" variant="outline">
         <Search className="size-4" />

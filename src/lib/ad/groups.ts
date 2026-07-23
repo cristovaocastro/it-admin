@@ -1,19 +1,36 @@
 import "server-only";
 import * as ldap from "ldapjs";
 import { withAdClient, ldapSearch, ldapAdd, ldapModify, ldapDel, ldapModifyDN } from "@/lib/ad/client";
-import type { AdConnectionConfig, AdGroupDetail, AdGroupSummary } from "@/lib/ad/types";
+import type { AdConnectionConfig, AdGroupDetail, AdGroupScope, AdGroupSummary } from "@/lib/ad/types";
 import { AdOperationError } from "@/lib/ad/types";
 import { escapeDnValue, escapeFilterValue, rdnOf } from "@/lib/ad/util";
 
-const GROUP_ATTRIBUTES = ["distinguishedName", "cn", "description", "member"];
+const GROUP_ATTRIBUTES = ["distinguishedName", "cn", "description", "member", "groupType"];
+
+// groupType: soma de escopo + tipo. Referência Microsoft.
+const GROUP_TYPE = {
+  Global: 0x00000002,
+  DomainLocal: 0x00000004,
+  Universal: 0x00000008,
+  SECURITY: -2147483648, // 0x80000000 (assinado)
+} as const;
+
+function scopeFromGroupType(groupType: number): AdGroupScope {
+  if (groupType & GROUP_TYPE.DomainLocal) return "DomainLocal";
+  if (groupType & GROUP_TYPE.Universal) return "Universal";
+  return "Global";
+}
 
 function toGroupSummary(entry: Record<string, unknown>): AdGroupSummary {
   const members = entry.member ? (Array.isArray(entry.member) ? entry.member : [entry.member]) : [];
+  const groupType = Number(entry.groupType ?? GROUP_TYPE.Global);
   return {
     dn: String(entry.dn ?? entry.distinguishedName ?? ""),
     name: String(entry.cn ?? ""),
     description: entry.description ? String(entry.description) : undefined,
     memberCount: members.length,
+    scope: scopeFromGroupType(groupType),
+    security: (groupType & GROUP_TYPE.SECURITY) !== 0,
   };
 }
 
@@ -34,6 +51,7 @@ export async function searchAdGroups(config: AdConnectionConfig, params: SearchG
       filter,
       attributes: GROUP_ATTRIBUTES,
       sizeLimit: limit,
+      paged: true, // AD limita buscas não paginadas a 1000 resultados por padrão
     });
     return entries.map(toGroupSummary).sort((a, b) => a.name.localeCompare(b.name));
   });
@@ -58,17 +76,9 @@ export type CreateAdGroupParams = {
   name: string;
   description?: string;
   ou?: string;
-  scope?: "DomainLocal" | "Global" | "Universal";
+  scope?: AdGroupScope;
   security?: boolean; // true = security group, false = distribution group
 };
-
-// groupType: soma de escopo + tipo. Referência Microsoft.
-const GROUP_TYPE = {
-  Global: 0x00000002,
-  DomainLocal: 0x00000004,
-  Universal: 0x00000008,
-  SECURITY: -2147483648, // 0x80000000 (assinado)
-} as const;
 
 export async function createAdGroup(config: AdConnectionConfig, params: CreateAdGroupParams) {
   const ou = params.ou || config.groupsOU || config.baseDN;
