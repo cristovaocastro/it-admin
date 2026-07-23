@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveUriListObjectAction } from "@/lib/actions/firewall-uri-lists-actions";
+import { createUriListObjectAction } from "@/lib/actions/firewall-uri-lists-actions";
 import {
   Dialog,
   DialogContent,
@@ -17,21 +17,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Pencil, Plus } from "lucide-react";
+import { AlertCircle, Plus } from "lucide-react";
 
-function NameForm({
-  connectionId,
-  uuid,
-  name,
-  onClose,
-}: {
-  connectionId: string;
-  uuid?: string;
-  name?: string;
-  onClose: () => void;
-}) {
-  const isEdit = !!uuid;
-  const [state, formAction] = useActionState(saveUriListObjectAction, undefined);
+function CreateForm({ connectionId, onClose }: { connectionId: string; onClose: () => void }) {
+  const [state, formAction] = useActionState(createUriListObjectAction, undefined);
   const router = useRouter();
 
   useEffect(() => {
@@ -45,16 +34,14 @@ function NameForm({
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>{isEdit ? `Renomear "${name}"` : "Nova URI list"}</DialogTitle>
+        <DialogTitle>Nova URI list</DialogTitle>
         <DialogDescription>
-          {isEdit
-            ? "Só o nome é alterado aqui — gerencie as entradas na tela da URI list."
-            : "Cria uma URI list vazia; adicione URIs, domínios e palavras-chave na tela seguinte."}
+          Cria uma URI list vazia; adicione as entradas (URIs, domínios ou palavras-chave) na tela seguinte. O nome
+          não pode ser alterado depois de criada.
         </DialogDescription>
       </DialogHeader>
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="connectionId" value={connectionId} />
-        {isEdit && <input type="hidden" name="uuid" value={uuid} />}
         {state?.error && (
           <Alert variant="destructive">
             <AlertCircle className="size-4" />
@@ -63,10 +50,10 @@ function NameForm({
         )}
         <div className="space-y-2">
           <Label htmlFor="name">Nome</Label>
-          <Input id="name" name="name" defaultValue={name} required />
+          <Input id="name" name="name" required />
         </div>
         <DialogFooter>
-          <SubmitButton pendingText="Salvando...">{isEdit ? "Salvar" : "Criar URI list"}</SubmitButton>
+          <SubmitButton pendingText="Salvando...">Criar URI list</SubmitButton>
         </DialogFooter>
       </form>
     </DialogContent>
@@ -81,27 +68,7 @@ export function CreateUriListObjectDialog({ connectionId }: { connectionId: stri
         <Plus className="size-4" />
         Nova URI list
       </DialogTrigger>
-      <NameForm connectionId={connectionId} onClose={() => setOpen(false)} />
-    </Dialog>
-  );
-}
-
-export function RenameUriListObjectDialog({
-  connectionId,
-  uuid,
-  name,
-}: {
-  connectionId: string;
-  uuid: string;
-  name: string;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="ghost" size="icon-sm" title="Renomear" />}>
-        <Pencil className="size-4" />
-      </DialogTrigger>
-      <NameForm connectionId={connectionId} uuid={uuid} name={name} onClose={() => setOpen(false)} />
+      <CreateForm connectionId={connectionId} onClose={() => setOpen(false)} />
     </Dialog>
   );
 }

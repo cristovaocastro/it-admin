@@ -4,8 +4,8 @@ import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { AuditFilters } from "./audit-filters";
+import { AuditLogRow } from "./audit-log-row";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -20,6 +20,9 @@ const ENTITY_LABEL: Record<string, string> = {
   AD_GROUP: "Grupo AD",
   AD_COMPUTER: "Computador AD",
   AD_OU: "OU do AD",
+  FIREWALL_CONNECTION: "Conexão de firewall",
+  FIREWALL_RULE: "Regra de firewall",
+  FIREWALL_URI_LIST: "URI list de firewall",
   SYSTEM: "Sistema",
 };
 
@@ -89,24 +92,18 @@ export default async function AuditoriaPage({ searchParams }: { searchParams: Pr
             </TableHeader>
             <TableBody>
               {logs.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                    {log.createdAt.toLocaleString("pt-BR")}
-                  </TableCell>
-                  <TableCell className="font-medium">{log.actorName}</TableCell>
-                  <TableCell className="font-mono text-xs">{log.action}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{ENTITY_LABEL[log.entityType] ?? log.entityType}</Badge>
-                    {log.entityLabel && <span className="ml-1 text-xs text-muted-foreground">{log.entityLabel}</span>}
-                  </TableCell>
-                  <TableCell className="max-w-md text-sm">{log.description}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{log.ip ?? "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant={log.status === "SUCCESS" ? "secondary" : "destructive"}>
-                      {log.status === "SUCCESS" ? "sucesso" : "falha"}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
+                <AuditLogRow
+                  key={log.id}
+                  createdAt={log.createdAt.toLocaleString("pt-BR")}
+                  actorName={log.actorName}
+                  action={log.action}
+                  entityTypeLabel={ENTITY_LABEL[log.entityType] ?? log.entityType}
+                  entityLabel={log.entityLabel}
+                  description={log.description}
+                  metadata={log.metadata}
+                  ip={log.ip}
+                  status={log.status}
+                />
               ))}
               {logs.length === 0 && (
                 <TableRow>

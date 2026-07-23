@@ -7,7 +7,6 @@ import { getUriListObject } from "@/lib/firewall/uri-lists";
 import { FirewallOperationError } from "@/lib/firewall/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, ChevronLeft } from "lucide-react";
-import { RenameUriListObjectDialog } from "../uri-list-object-dialog";
 import { EntriesManager } from "./entries-manager";
 
 type SearchParams = { conexao?: string };
@@ -19,7 +18,7 @@ export default async function UriListObjectPage({
   params: Promise<{ uuid: string }>;
   searchParams: Promise<SearchParams>;
 }) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "OPERATOR"]);
   const { uuid } = await params;
   const sp = await searchParams;
 
@@ -46,12 +45,7 @@ export default async function UriListObjectPage({
           <ChevronLeft className="size-4" />
           Voltar para URI Lists
         </Link>
-        {object && (
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{object.name}</h1>
-            <RenameUriListObjectDialog connectionId={connection.id} uuid={object.uuid} name={object.name} />
-          </div>
-        )}
+        {object && <h1 className="text-2xl font-semibold tracking-tight">{object.name}</h1>}
         <p className="text-sm text-muted-foreground">Conexão: {connection.name}</p>
       </div>
 

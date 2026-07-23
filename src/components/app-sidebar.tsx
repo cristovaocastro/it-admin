@@ -54,7 +54,7 @@ const NAV: NavGroup[] = [
     title: "Firewall",
     items: [
       { href: "/firewall/conexoes", label: "Conexões", icon: Flame, roles: ["ADMIN"] },
-      { href: "/firewall/uri-lists", label: "URI Lists", icon: ListFilter, roles: ["ADMIN"] },
+      { href: "/firewall/uri-lists", label: "URI Lists", icon: ListFilter, roles: ["ADMIN", "OPERATOR"] },
     ],
   },
 ];

@@ -16,7 +16,7 @@ import { CreateUriListGroupDialog } from "./uri-list-group-dialog";
 type SearchParams = { conexao?: string };
 
 export default async function FirewallUriListsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "OPERATOR"]);
   const sp = await searchParams;
 
   const connections = await db.firewallConnection.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });

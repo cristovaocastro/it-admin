@@ -29,6 +29,7 @@ import {
 import { ResetAdPasswordDialog } from "./reset-ad-password-dialog";
 import { EditAdUserDialog } from "./edit-ad-user-dialog";
 import { UserGroupsDialog } from "./user-groups-dialog";
+import { CloneAdUserDialog } from "./clone-ad-user-dialog";
 import { BulkAddToGroupDialog } from "./bulk-add-to-group-dialog";
 import { MoveObjectDialog } from "../move-object-dialog";
 
@@ -323,6 +324,7 @@ export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; 
                 <div className="flex items-center justify-end gap-0.5">
                   <EditAdUserDialog connectionId={connectionId} user={u} />
                   <UserGroupsDialog connectionId={connectionId} user={u} />
+                  <CloneAdUserDialog connectionId={connectionId} user={u} />
                   <ResetAdPasswordDialog connectionId={connectionId} user={u} />
                   {u.locked && (
                     <Button variant="ghost" size="icon-sm" title="Desbloquear" disabled={pending} onClick={() => unlock(u)}>

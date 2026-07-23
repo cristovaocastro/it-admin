@@ -8,11 +8,11 @@ import { loadFirewallConnectionConfig } from "@/lib/firewall/connection";
 import {
   createUriListObject,
   updateUriListObject,
-  deleteUriListObject,
+  getUriListObject,
   createUriListGroup,
   updateUriListGroup,
-  deleteUriListGroup,
 } from "@/lib/firewall/uri-lists";
+import type { FirewallUriListObject } from "@/lib/firewall/uri-lists";
 import { withFirewallErrorHandling } from "@/lib/firewall/error-handling";
 
 export type ActionState = { error?: string; success?: string } | undefined;
@@ -30,9 +30,56 @@ function linesToList(value: FormDataEntryValue | null): string[] {
     .filter(Boolean);
 }
 
+const MAX_LISTED_ENTRIES = 20;
+
+function formatEntryValues(values: string[]): string {
+  if (values.length <= MAX_LISTED_ENTRIES) return values.join(", ");
+  return `${values.slice(0, MAX_LISTED_ENTRIES).join(", ")}, +${values.length - MAX_LISTED_ENTRIES} outro(s)`;
+}
+
+function diffList(before: string[], after: string[]): { added: string[]; removed: string[] } {
+  const beforeSet = new Set(before);
+  const afterSet = new Set(after);
+  return {
+    added: after.filter((v) => !beforeSet.has(v)),
+    removed: before.filter((v) => !afterSet.has(v)),
+  };
+}
+
+type EntryDiff = {
+  added: { uris: string[]; domains: string[]; keywords: string[] };
+  removed: { uris: string[]; domains: string[]; keywords: string[] };
+};
+
+function diffEntries(
+  before: FirewallUriListObject | null,
+  after: { uris: string[]; domains: string[]; keywords: string[] }
+): EntryDiff {
+  const uris = diffList(before?.uris ?? [], after.uris);
+  const domains = diffList(before?.domains ?? [], after.domains);
+  const keywords = diffList(before?.keywords ?? [], after.keywords);
+  return {
+    added: { uris: uris.added, domains: domains.added, keywords: keywords.added },
+    removed: { uris: uris.removed, domains: domains.removed, keywords: keywords.removed },
+  };
+}
+
+function describeEntryDiff(diff: EntryDiff): string {
+  const parts: string[] = [];
+  const kinds: { key: keyof EntryDiff["added"]; label: string }[] = [
+    { key: "uris", label: "URI" },
+    { key: "domains", label: "domínio" },
+    { key: "keywords", label: "palavra-chave" },
+  ];
+  for (const { key, label } of kinds) {
+    if (diff.added[key].length) parts.push(`${label}(s) adicionado(s): ${formatEntryValues(diff.added[key])}`);
+    if (diff.removed[key].length) parts.push(`${label}(s) removido(s): ${formatEntryValues(diff.removed[key])}`);
+  }
+  return parts.join("; ");
+}
+
 const objectSchema = z.object({
   connectionId: z.string().uuid(),
-  uuid: z.string().optional(),
   name: z.string().min(1, "Informe o nome da URI list."),
 });
 
@@ -41,17 +88,48 @@ async function saveUriListObjectCore(
   connectionId: string,
   uuid: string | undefined,
   name: string,
-  uris: string[],
-  domains: string[],
-  keywords: string[]
+  uris: string[] | undefined,
+  domains: string[] | undefined,
+  keywords: string[] | undefined
 ): Promise<ActionState> {
-  const params = { name, uris, domains, keywords };
   const isEdit = !!uuid;
-
   const config = await loadFirewallConnectionConfig(connectionId);
+
+  // Em edição, sempre buscamos o estado atual no firewall: (1) permite calcular o diff
+  // exato para a auditoria, e (2) evita que um formulário que só altera o nome (ex:
+  // "Renomear") apague as entradas existentes, já que o PUT do SonicOS substitui a lista
+  // inteira — sem isso, renomear sem reenviar uris/domains/keywords zerava a URI list.
+  let before: FirewallUriListObject | null = null;
+  if (isEdit) {
+    const beforeResult = await withFirewallErrorHandling(() => getUriListObject(config, uuid));
+    if ("error" in beforeResult) {
+      await logAudit({
+        actor: { id: actor.id, name: actor.username },
+        action: "firewall_uri_list.update",
+        entityType: "FIREWALL_URI_LIST",
+        entityId: uuid,
+        entityLabel: name,
+        description: `Falha ao atualizar URI list "${name}" no firewall: não foi possível ler o estado atual antes de salvar (${beforeResult.error})`,
+        metadata: { connectionId },
+        status: "FAILURE",
+      });
+      return { error: beforeResult.error };
+    }
+    before = beforeResult.ok;
+  }
+
+  const finalUris = uris ?? before?.uris ?? [];
+  const finalDomains = domains ?? before?.domains ?? [];
+  const finalKeywords = keywords ?? before?.keywords ?? [];
+  const params = { name, uris: finalUris, domains: finalDomains, keywords: finalKeywords };
+
   const result = await withFirewallErrorHandling(() =>
     isEdit ? updateUriListObject(config, uuid, params) : createUriListObject(config, params)
   );
+
+  const diff = diffEntries(before, { uris: finalUris, domains: finalDomains, keywords: finalKeywords });
+  const changeSummary = describeEntryDiff(diff);
+  const renamed = before && before.name !== name ? before.name : undefined;
 
   await logAudit({
     actor: { id: actor.id, name: actor.username },
@@ -62,8 +140,17 @@ async function saveUriListObjectCore(
     description:
       "error" in result
         ? `Falha ao ${isEdit ? "atualizar" : "criar"} URI list "${name}" no firewall: ${result.error}`
-        : `URI list "${name}" ${isEdit ? "atualizada" : "criada"} no firewall`,
-    metadata: { connectionId, name, uriCount: uris.length, domainCount: domains.length, keywordCount: keywords.length },
+        : `URI list "${name}"${renamed ? ` (renomeada de "${renamed}")` : ""} ${isEdit ? "atualizada" : "criada"} no firewall${changeSummary ? ` — ${changeSummary}` : ""}`,
+    metadata: {
+      connectionId,
+      name,
+      renamedFrom: renamed ?? null,
+      uriCount: finalUris.length,
+      domainCount: finalDomains.length,
+      keywordCount: finalKeywords.length,
+      added: diff.added,
+      removed: diff.removed,
+    },
     status: "error" in result ? "FAILURE" : "SUCCESS",
   });
 
@@ -73,20 +160,16 @@ async function saveUriListObjectCore(
   return { success: `URI list ${isEdit ? "atualizada" : "criada"} com sucesso.` };
 }
 
-export async function saveUriListObjectAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const actor = await requireRole(["ADMIN"]);
+/** Cria uma URI list vazia. Não há ação de renomear/excluir a lista em si — só a criação
+ * e a gestão das entradas (ver updateUriListObjectEntriesAction) ficam expostas na UI, de
+ * propósito: excluir uma URI list de content filter em uso tem um custo operacional alto
+ * (reabertura de chamado/BO) se feito sem querer. */
+export async function createUriListObjectAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole(["ADMIN", "OPERATOR"]);
   const parsed = objectSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
-  return saveUriListObjectCore(
-    actor,
-    parsed.data.connectionId,
-    parsed.data.uuid,
-    parsed.data.name,
-    linesToList(formData.get("uris")),
-    linesToList(formData.get("domains")),
-    linesToList(formData.get("keywords"))
-  );
+  return saveUriListObjectCore(actor, parsed.data.connectionId, undefined, parsed.data.name, undefined, undefined, undefined);
 }
 
 /** Variante chamável direto (sem FormData) — usada pelo gerenciador de entradas com paginação/busca. */
@@ -102,7 +185,7 @@ const entriesSchema = z.object({
 export async function updateUriListObjectEntriesAction(
   params: z.infer<typeof entriesSchema>
 ): Promise<ActionState> {
-  const actor = await requireRole(["ADMIN"]);
+  const actor = await requireRole(["ADMIN", "OPERATOR"]);
   const parsed = entriesSchema.safeParse(params);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
@@ -117,34 +200,6 @@ export async function updateUriListObjectEntriesAction(
   );
 }
 
-export async function deleteUriListObjectAction(params: {
-  connectionId: string;
-  uuid: string;
-  label: string;
-}): Promise<ActionState> {
-  const actor = await requireRole(["ADMIN"]);
-  const config = await loadFirewallConnectionConfig(params.connectionId);
-  const result = await withFirewallErrorHandling(() => deleteUriListObject(config, params.uuid));
-
-  await logAudit({
-    actor: { id: actor.id, name: actor.username },
-    action: "firewall_uri_list.delete",
-    entityType: "FIREWALL_URI_LIST",
-    entityId: params.uuid,
-    entityLabel: params.label,
-    description:
-      "error" in result
-        ? `Falha ao excluir URI list "${params.label}" do firewall: ${result.error}`
-        : `URI list "${params.label}" excluída do firewall`,
-    metadata: { connectionId: params.connectionId },
-    status: "error" in result ? "FAILURE" : "SUCCESS",
-  });
-
-  if ("error" in result) return { error: result.error };
-  revalidatePath(pathFor(params.connectionId));
-  return { success: "URI list excluída." };
-}
-
 const groupSchema = z.object({
   connectionId: z.string().uuid(),
   uuid: z.string().optional(),
@@ -152,7 +207,7 @@ const groupSchema = z.object({
 });
 
 export async function saveUriListGroupAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const actor = await requireRole(["ADMIN"]);
+  const actor = await requireRole(["ADMIN", "OPERATOR"]);
   const parsed = groupSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
@@ -185,32 +240,4 @@ export async function saveUriListGroupAction(_prev: ActionState, formData: FormD
   if ("error" in result) return { error: result.error };
   revalidatePath(pathFor(parsed.data.connectionId));
   return { success: `Grupo ${isEdit ? "atualizado" : "criado"} com sucesso.` };
-}
-
-export async function deleteUriListGroupAction(params: {
-  connectionId: string;
-  uuid: string;
-  label: string;
-}): Promise<ActionState> {
-  const actor = await requireRole(["ADMIN"]);
-  const config = await loadFirewallConnectionConfig(params.connectionId);
-  const result = await withFirewallErrorHandling(() => deleteUriListGroup(config, params.uuid));
-
-  await logAudit({
-    actor: { id: actor.id, name: actor.username },
-    action: "firewall_uri_list_group.delete",
-    entityType: "FIREWALL_URI_LIST",
-    entityId: params.uuid,
-    entityLabel: params.label,
-    description:
-      "error" in result
-        ? `Falha ao excluir grupo de URI list "${params.label}" do firewall: ${result.error}`
-        : `Grupo de URI list "${params.label}" excluído do firewall`,
-    metadata: { connectionId: params.connectionId },
-    status: "error" in result ? "FAILURE" : "SUCCESS",
-  });
-
-  if ("error" in result) return { error: result.error };
-  revalidatePath(pathFor(params.connectionId));
-  return { success: "Grupo excluído." };
 }

@@ -47,8 +47,9 @@ function UriListGroupForm({
       <DialogHeader>
         <DialogTitle>{isEdit ? `Editar "${group.name}"` : "Novo grupo de URI list"}</DialogTitle>
         <DialogDescription>
-          Agrupe URI lists já cadastradas (ou outros grupos) pelo nome exato. Alterações são aplicadas e gravadas
-          diretamente no firewall.
+          {isEdit
+            ? "Ajuste quais URI lists fazem parte deste grupo. Nome e grupos aninhados não são alterados aqui."
+            : "Agrupe URI lists já cadastradas (ou outros grupos) pelo nome exato. Alterações são aplicadas e gravadas diretamente no firewall."}
         </DialogDescription>
       </DialogHeader>
       <form action={formAction} className="space-y-4">
@@ -60,18 +61,31 @@ function UriListGroupForm({
             <AlertDescription>{state.error}</AlertDescription>
           </Alert>
         )}
-        <div className="space-y-2">
-          <Label htmlFor="name">Nome</Label>
-          <Input id="name" name="name" defaultValue={group?.name} required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="objectNames">URI lists membro (um nome por linha)</Label>
-          <Textarea id="objectNames" name="objectNames" rows={3} defaultValue={group?.objectNames.join("\n")} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="groupNames">Grupos membro (um nome por linha, opcional)</Label>
-          <Textarea id="groupNames" name="groupNames" rows={2} defaultValue={group?.groupNames.join("\n")} />
-        </div>
+        {isEdit ? (
+          <>
+            <input type="hidden" name="name" value={group.name} />
+            <input type="hidden" name="groupNames" value={group.groupNames.join("\n")} />
+            <div className="space-y-2">
+              <Label htmlFor="objectNames">URI lists membro (um nome por linha)</Label>
+              <Textarea id="objectNames" name="objectNames" rows={5} defaultValue={group.objectNames.join("\n")} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="name">Nome</Label>
+              <Input id="name" name="name" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="objectNames">URI lists membro (um nome por linha)</Label>
+              <Textarea id="objectNames" name="objectNames" rows={3} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="groupNames">Grupos membro (um nome por linha, opcional)</Label>
+              <Textarea id="groupNames" name="groupNames" rows={2} />
+            </div>
+          </>
+        )}
         <DialogFooter>
           <SubmitButton pendingText="Salvando...">{isEdit ? "Salvar alterações" : "Criar grupo"}</SubmitButton>
         </DialogFooter>

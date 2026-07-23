@@ -54,6 +54,11 @@ export function rdnOf(dn: string): string {
   return dn.split(",")[0];
 }
 
+/** Extrai o DN pai (tudo após o primeiro componente), ex: "OU=bar,DC=x" de "CN=foo,OU=bar,DC=x". */
+export function parentOf(dn: string): string {
+  return dn.split(",").slice(1).join(",");
+}
+
 /** Converte um valor de data no formato AD generalized time (whenCreated etc.) para Date. */
 export function parseAdGeneralizedTime(value?: string): Date | undefined {
   if (!value) return undefined;

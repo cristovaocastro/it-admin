@@ -74,8 +74,8 @@ export async function updateAdComputerAction(_prev: ActionState, formData: FormD
     description:
       "error" in result
         ? `Falha ao atualizar computador AD "${parsed.data.label}": ${result.error}`
-        : `Descrição do computador AD "${parsed.data.label}" atualizada`,
-    metadata: { connectionId: parsed.data.connectionId },
+        : `Descrição do computador AD "${parsed.data.label}" atualizada para: "${parsed.data.description ?? ""}"`,
+    metadata: { connectionId: parsed.data.connectionId, newDescription: parsed.data.description ?? "" },
     status: "error" in result ? "FAILURE" : "SUCCESS",
   });
 

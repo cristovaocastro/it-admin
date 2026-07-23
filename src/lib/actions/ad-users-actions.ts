@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/auth/guards";
 import { loadAdConnectionConfig } from "@/lib/ad/connection";
 import {
   createAdUser,
+  getAdUser,
   setAdUserPassword,
   setAdUserEnabled,
   setAdUserPasswordNeverExpires,
@@ -16,6 +17,9 @@ import {
   deleteAdUser,
   moveAdUser,
 } from "@/lib/ad/users";
+import { addAdGroupMember } from "@/lib/ad/groups";
+import { parentOf, rdnOf } from "@/lib/ad/util";
+import { AdOperationError } from "@/lib/ad/types";
 import { withAdErrorHandling } from "@/lib/ad/error-handling";
 
 export type ActionState = { error?: string; success?: string } | undefined;
@@ -79,6 +83,120 @@ export async function createAdUserAction(_prev: ActionState, formData: FormData)
   if ("error" in result) return { error: result.error };
   revalidatePath(pathFor(parsed.data.connectionId));
   return { success: "Usuário AD criado com sucesso." };
+}
+
+const cloneSchema = z.object({
+  connectionId: z.string().uuid(),
+  sourceDn: z.string().min(1, "Selecione o usuário de origem."),
+  sourceLabel: z.string().min(1),
+  sAMAccountName: z.string().min(1, "Informe o login (sAMAccountName)."),
+  userPrincipalName: z.string().email("UPN precisa ter o formato de e-mail (usuario@dominio)."),
+  givenName: z.string().min(1, "Informe o primeiro nome."),
+  sn: z.string().min(1, "Informe o sobrenome."),
+  mail: z.string().email().optional().or(z.literal("")),
+  ou: z.string().optional(),
+  password: z.string().min(8, "A senha inicial precisa ter ao menos 8 caracteres."),
+  mustChangePasswordAtLogon: z.coerce.boolean().default(true),
+  enabled: z.coerce.boolean().default(true),
+  copyGroups: z.coerce.boolean().default(true),
+});
+
+/** Clona um usuário AD existente: cria uma conta nova (login/senha próprios) copiando
+ * departamento, cargo, descrição, telefone e os grupos do usuário de origem. */
+export async function cloneAdUserAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole(["ADMIN", "OPERATOR"]);
+  const parsed = cloneSchema.safeParse({
+    ...Object.fromEntries(formData),
+    mustChangePasswordAtLogon: formData.get("mustChangePasswordAtLogon") === "on",
+    enabled: formData.get("enabled") === "on",
+    copyGroups: formData.get("copyGroups") === "on",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+
+  const config = await loadAdConnectionConfig(parsed.data.connectionId);
+
+  const result = await withAdErrorHandling(async () => {
+    const source = await getAdUser(config, parsed.data.sourceDn);
+    const ou = parsed.data.ou || parentOf(source.dn);
+
+    const newDn = await createAdUser(config, {
+      sAMAccountName: parsed.data.sAMAccountName,
+      userPrincipalName: parsed.data.userPrincipalName,
+      givenName: parsed.data.givenName,
+      sn: parsed.data.sn,
+      mail: parsed.data.mail || undefined,
+      ou,
+      password: parsed.data.password,
+      mustChangePasswordAtLogon: parsed.data.mustChangePasswordAtLogon,
+      enabled: parsed.data.enabled,
+    });
+
+    await updateAdUser(config, newDn, {
+      department: source.department,
+      title: source.title,
+      description: source.description,
+      telephoneNumber: source.telephoneNumber,
+    });
+
+    const groupsCopied: string[] = [];
+    const groupsFailed: { groupDn: string; error: string }[] = [];
+    if (parsed.data.copyGroups) {
+      for (const groupDn of source.memberOf) {
+        try {
+          await addAdGroupMember(config, groupDn, newDn);
+          groupsCopied.push(groupDn);
+        } catch (err) {
+          groupsFailed.push({
+            groupDn,
+            error: err instanceof AdOperationError ? err.message : "Falha desconhecida.",
+          });
+        }
+      }
+    }
+
+    return { newDn, ou, groupsCopied, groupsFailed };
+  });
+
+  const groupNames = (dns: string[]) => dns.map((dn) => rdnOf(dn).replace(/^CN=/, "")).join(", ");
+  const cloneDetails =
+    "ok" in result
+      ? [
+          result.ok.groupsCopied.length ? `grupos copiados: ${groupNames(result.ok.groupsCopied)}` : null,
+          result.ok.groupsFailed.length
+            ? `falha ao copiar ${result.ok.groupsFailed.length} grupo(s): ${groupNames(result.ok.groupsFailed.map((g) => g.groupDn))}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("; ")
+      : "";
+
+  await logAudit({
+    actor: { id: actor.id, name: actor.username },
+    action: "ad_user.clone",
+    entityType: "AD_USER",
+    entityId: "error" in result ? null : result.ok.newDn,
+    entityLabel: parsed.data.sAMAccountName,
+    description:
+      "error" in result
+        ? `Falha ao clonar usuário AD "${parsed.data.sourceLabel}" para "${parsed.data.sAMAccountName}": ${result.error}`
+        : `Usuário AD "${parsed.data.sAMAccountName}" criado como cópia de "${parsed.data.sourceLabel}"${cloneDetails ? ` — ${cloneDetails}` : ""}`,
+    metadata: {
+      connectionId: parsed.data.connectionId,
+      sourceDn: parsed.data.sourceDn,
+      sourceLabel: parsed.data.sourceLabel,
+      copyGroups: parsed.data.copyGroups,
+      groupsCopied: "ok" in result ? result.ok.groupsCopied : [],
+      groupsFailed: "ok" in result ? result.ok.groupsFailed : [],
+    },
+    status: "error" in result ? "FAILURE" : "SUCCESS",
+  });
+
+  if ("error" in result) return { error: result.error };
+  revalidatePath(pathFor(parsed.data.connectionId));
+  const failureNote = result.ok.groupsFailed.length
+    ? ` (${result.ok.groupsFailed.length} grupo(s) não puderam ser copiados — veja a auditoria)`
+    : "";
+  return { success: `Usuário clonado com sucesso.${failureNote}` };
 }
 
 const resetPasswordSchema = z.object({
@@ -216,6 +334,18 @@ export async function updateAdUserAction(_prev: ActionState, formData: FormData)
     await setAdUserAccountExpires(config, dn, expiresAt);
   });
 
+  const fieldSummary = Object.entries(fields)
+    .filter(([, value]) => value !== undefined && value !== "")
+    .map(([key, value]) => `${key}=${value}`)
+    .join(", ");
+  const extraSummary = [
+    passwordNeverExpires ? "senha nunca expira" : null,
+    accountExpires ? `conta expira em ${accountExpires}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const changeSummary = [fieldSummary, extraSummary].filter(Boolean).join("; ");
+
   await logAudit({
     actor: { id: actor.id, name: actor.username },
     action: "ad_user.update",
@@ -224,8 +354,8 @@ export async function updateAdUserAction(_prev: ActionState, formData: FormData)
     entityLabel: fields.displayName || dn,
     description:
       "error" in result
-        ? `Falha ao atualizar atributos do usuário AD: ${result.error}`
-        : `Atributos do usuário AD atualizados`,
+        ? `Falha ao atualizar atributos do usuário AD "${fields.displayName || dn}": ${result.error}`
+        : `Atributos do usuário AD "${fields.displayName || dn}" atualizados${changeSummary ? ` — ${changeSummary}` : ""}`,
     metadata: { connectionId, fields, passwordNeverExpires, accountExpires: accountExpires || null },
     status: "error" in result ? "FAILURE" : "SUCCESS",
   });

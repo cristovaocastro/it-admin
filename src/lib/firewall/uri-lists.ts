@@ -116,14 +116,18 @@ export type UriListObjectParams = {
 };
 
 function buildObjectPayload(params: UriListObjectParams): RawUriListObjectCollection {
+  // Este firmware (SonicOS 8.2.1-8010-R9437) rejeita os campos "domain" e "keyword" do
+  // próprio schema OpenAPI dele com "'domain'/'keyword' not a reasonable value" para
+  // QUALQUER valor, confirmado em teste isolado (inclusive "example.com"). Só o campo
+  // "uri" é aceito de fato — e já é assim que centenas de domínios "soltos" já estão
+  // armazenados nas listas existentes deste cliente. Por isso mesclamos tudo em "uri".
+  const mergedUris = Array.from(new Set([...params.uris, ...params.domains, ...params.keywords]));
   return {
     content_filter: {
       uri_list_object: [
         {
           name: params.name,
-          ...(params.uris.length ? { uri: params.uris.map((uri) => ({ uri })) } : {}),
-          ...(params.domains.length ? { domain: params.domains.map((domain) => ({ domain })) } : {}),
-          ...(params.keywords.length ? { keyword: params.keywords.map((keyword) => ({ keyword })) } : {}),
+          ...(mergedUris.length ? { uri: mergedUris.map((uri) => ({ uri })) } : {}),
         },
       ],
     },
