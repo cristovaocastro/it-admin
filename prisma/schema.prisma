@@ -59,6 +59,7 @@ model User {
   recoveryCodes  MfaRecoveryCode[]
   auditLogs      AuditLog[]         @relation("AuditActor")
   adConnections  AdConnection[]     @relation("AdConnectionCreatedBy")
+  firewallConnections FirewallConnection[] @relation("FirewallConnectionCreatedBy")
 
   @@index([status])
   @@map("users")
@@ -116,6 +117,9 @@ enum AuditEntityType {
   AD_GROUP
   AD_COMPUTER
   AD_OU
+  FIREWALL_CONNECTION
+  FIREWALL_RULE
+  FIREWALL_URI_LIST
   SYSTEM
 }
 
@@ -192,4 +196,40 @@ model AdConnection {
   updatedAt   DateTime @updatedAt
 
   @@map("ad_connections")
+}
+
+// ---------------------------------------------------------------------------
+// Firewall — conexões com firewalls externos gerenciados pelo painel (hoje: SonicWall SonicOS API)
+// ---------------------------------------------------------------------------
+
+enum FirewallTestStatus {
+  NEVER_TESTED
+  SUCCESS
+  FAILURE
+}
+
+model FirewallConnection {
+  id   String @id @default(uuid())
+  name String @unique // nome amigável, ex: "Firewall Matriz"
+  host String
+  port Int    @default(443) // porta de gestão HTTPS do SonicOS API
+
+  adminUsername          String // usuário admin usado para autenticar na API (RFC-2617 Basic Auth)
+  adminPasswordEncrypted String // senha do admin, criptografada (AES-256-GCM)
+
+  rejectUnauthorized Boolean @default(true) // validar certificado TLS do firewall
+
+  isActive Boolean @default(true)
+
+  lastTestAt        DateTime?
+  lastTestStatus    FirewallTestStatus @default(NEVER_TESTED)
+  lastTestError     String?
+  lastTestLatencyMs Int?
+
+  createdById String?
+  createdBy   User?    @relation("FirewallConnectionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("firewall_connections")
 }
