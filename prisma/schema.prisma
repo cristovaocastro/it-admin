@@ -1,0 +1,195 @@
+// IT Admin — schema do banco de dados
+// Cobre: usuários do painel + MFA, sessões, auditoria e o módulo de Active Directory.
+// Rode `npx prisma migrate dev` após qualquer alteração aqui.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Usuários do painel (autenticação local do sistema)
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN // acesso total: usuários, auditoria, conexões AD, operações AD
+  OPERATOR // opera o dia a dia (usuários/grupos do AD), não gerencia usuários do painel nem conexões
+  AUDITOR // somente leitura: dashboard e trilha de auditoria
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  LOCKED
+}
+
+model User {
+  id       String     @id @default(uuid())
+  name     String
+  email    String     @unique
+  username String     @unique
+  role     UserRole   @default(OPERATOR)
+  status   UserStatus @default(ACTIVE)
+
+  passwordHash        String
+  mustChangePassword  Boolean   @default(true)
+  passwordChangedAt   DateTime?
+
+  // MFA (TOTP obrigatório para todo usuário do painel)
+  mfaEnabled      Boolean   @default(false)
+  mfaSecret       String? // segredo TOTP criptografado (AES-256-GCM)
+  mfaEnforcedFrom DateTime? // desde quando o MFA passou a ser obrigatório para esse usuário
+
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  lastLoginIp         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdById String?
+  createdBy   User?   @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  usersCreated User[] @relation("UserCreatedBy")
+
+  sessions       Session[]
+  recoveryCodes  MfaRecoveryCode[]
+  auditLogs      AuditLog[]         @relation("AuditActor")
+  adConnections  AdConnection[]     @relation("AdConnectionCreatedBy")
+
+  @@index([status])
+  @@map("users")
+}
+
+model MfaRecoveryCode {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("mfa_recovery_codes")
+}
+
+// Sessão de login guardada no banco (permite revogação instantânea e auditoria).
+// O cookie do navegador guarda só o token opaco; o banco guarda o hash dele.
+model Session {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String    @unique
+  mfaVerified  Boolean   @default(false)
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime  @default(now())
+  lastSeenAt   DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  revokedReason String?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Auditoria — log de tudo que é feito, por quem e quando
+// ---------------------------------------------------------------------------
+
+enum AuditStatus {
+  SUCCESS
+  FAILURE
+}
+
+// Catálogo de tipos de entidade auditada (usado como string livre + enum de referência na UI)
+enum AuditEntityType {
+  AUTH
+  PANEL_USER
+  SESSION
+  AD_CONNECTION
+  AD_USER
+  AD_GROUP
+  AD_COMPUTER
+  AD_OU
+  SYSTEM
+}
+
+model AuditLog {
+  id         String          @id @default(uuid())
+  // Ator: pode ser nulo em falhas de login com usuário inexistente
+  actorId    String?
+  actor      User?           @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorName  String // snapshot do nome/username no momento da ação (sobrevive à exclusão do usuário)
+
+  action      String // ex: "auth.login", "ad_user.password_reset", "panel_user.create"
+  entityType  AuditEntityType
+  entityId    String? // id do registro afetado (local ou DN no AD)
+  entityLabel String? // rótulo legível (ex: username afetado, sAMAccountName, nome do grupo)
+
+  description String // frase legível descrevendo a ação
+  metadata    Json? // dados estruturados adicionais (diffs, parâmetros, motivo do erro)
+  status      AuditStatus     @default(SUCCESS)
+
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Active Directory — conexões externas gerenciadas pelo painel
+// ---------------------------------------------------------------------------
+
+enum AdEncryption {
+  NONE
+  STARTTLS
+  LDAPS
+}
+
+enum AdTestStatus {
+  NEVER_TESTED
+  SUCCESS
+  FAILURE
+}
+
+model AdConnection {
+  id     String @id @default(uuid())
+  name   String @unique // nome amigável, ex: "AD Matriz"
+  host   String
+  port   Int          @default(389)
+  baseDN String // ex: "DC=empresa,DC=local"
+
+  bindDN                 String // conta de serviço usada para bind, ex: "svc-itadmin@empresa.local"
+  bindPasswordEncrypted  String // senha da conta de serviço, criptografada (AES-256-GCM)
+
+  encryption      AdEncryption @default(STARTTLS)
+  rejectUnauthorized Boolean   @default(true) // validar certificado TLS do AD
+
+  usersOU     String? // OU padrão para criação de novos usuários (opcional)
+  groupsOU    String? // OU padrão para criação de novos grupos (opcional)
+  computersOU String? // OU padrão de busca de computadores (opcional; padrão: CN=Computers da Base DN)
+
+  isActive Boolean @default(true)
+
+  lastTestAt     DateTime?
+  lastTestStatus AdTestStatus @default(NEVER_TESTED)
+  lastTestError  String?
+  lastTestLatencyMs Int?
+
+  createdById String?
+  createdBy   User?   @relation("AdConnectionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("ad_connections")
+}
