@@ -23,6 +23,7 @@ export function UserGroupsDialog({ connectionId, user }: { connectionId: string;
   const [open, setOpen] = useState(false);
   const [groups, setGroups] = useState<string[]>(user.memberOf);
   const [mutating, startMutating] = useTransition();
+  const [pendingDn, setPendingDn] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ dn: string; label: string }[]>([]);
   const [searching, startSearch] = useTransition();
@@ -38,6 +39,7 @@ export function UserGroupsDialog({ connectionId, user }: { connectionId: string;
   }
 
   function addGroup(groupDn: string, groupLabel: string) {
+    setPendingDn(groupDn);
     startMutating(async () => {
       const fd = new FormData();
       fd.set("connectionId", connectionId);
@@ -51,10 +53,12 @@ export function UserGroupsDialog({ connectionId, user }: { connectionId: string;
         setGroups((prev) => (prev.includes(groupDn) ? prev : [...prev, groupDn]));
         router.refresh();
       }
+      setPendingDn(null);
     });
   }
 
   function removeGroup(groupDn: string) {
+    setPendingDn(groupDn);
     startMutating(async () => {
       const groupLabel = groupDn.split(",")[0].replace(/^CN=/, "");
       const result = await removeAdGroupMemberAction({ connectionId, groupDn, groupLabel, memberDn: user.dn });
@@ -64,6 +68,7 @@ export function UserGroupsDialog({ connectionId, user }: { connectionId: string;
         setGroups((prev) => prev.filter((g) => g !== groupDn));
         router.refresh();
       }
+      setPendingDn(null);
     });
   }
 
@@ -97,9 +102,10 @@ export function UserGroupsDialog({ connectionId, user }: { connectionId: string;
                   key={r.dn}
                   type="button"
                   disabled={mutating || groups.includes(r.dn)}
-                  className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:opacity-50"
+                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:opacity-50"
                   onClick={() => addGroup(r.dn, r.label)}
                 >
+                  {pendingDn === r.dn && <Loader2 className="size-3.5 animate-spin" />}
                   {r.label}
                 </button>
               ))}
@@ -117,7 +123,7 @@ export function UserGroupsDialog({ connectionId, user }: { connectionId: string;
                     {g.split(",")[0].replace(/^CN=/, "")}
                   </span>
                   <Button variant="ghost" size="icon-sm" disabled={mutating} onClick={() => removeGroup(g)}>
-                    <X className="size-4" />
+                    {pendingDn === g ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
                   </Button>
                 </div>
               ))}

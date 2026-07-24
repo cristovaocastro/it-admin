@@ -52,6 +52,7 @@ export function OuContentsPanel({
   const [error, setError] = useState<string | null>(null);
   const [loading, startLoading] = useTransition();
   const [pending, startTransition] = useTransition();
+  const [pendingDn, setPendingDn] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
   function reload() {
@@ -78,6 +79,7 @@ export function OuContentsPanel({
   }, [dn, tick]);
 
   function toggleUserEnabled(u: AdUserSummary) {
+    setPendingDn(u.dn);
     startTransition(async () => {
       const result = await setAdUserEnabledAction({ connectionId, dn: u.dn, label: userLabel(u), enabled: !u.enabled });
       if (result?.error) toast.error(result.error);
@@ -85,10 +87,12 @@ export function OuContentsPanel({
         toast.success(result?.success ?? "Atualizado.");
         router.refresh();
       }
+      setPendingDn(null);
     });
   }
 
   function unlockUser(u: AdUserSummary) {
+    setPendingDn(u.dn);
     startTransition(async () => {
       const result = await unlockAdUserAction({ connectionId, dn: u.dn, label: userLabel(u) });
       if (result?.error) toast.error(result.error);
@@ -96,10 +100,12 @@ export function OuContentsPanel({
         toast.success(result?.success ?? "Desbloqueado.");
         router.refresh();
       }
+      setPendingDn(null);
     });
   }
 
   function toggleComputerEnabled(c: AdComputerSummary) {
+    setPendingDn(c.dn);
     startTransition(async () => {
       const result = await setAdComputerEnabledAction({ connectionId, dn: c.dn, label: c.name, enabled: !c.enabled });
       if (result?.error) toast.error(result.error);
@@ -107,6 +113,7 @@ export function OuContentsPanel({
         toast.success(result?.success ?? "Atualizado.");
         router.refresh();
       }
+      setPendingDn(null);
     });
   }
 
@@ -235,7 +242,7 @@ export function OuContentsPanel({
                     <ResetAdPasswordDialog connectionId={connectionId} user={u} />
                     {u.locked && (
                       <Button variant="ghost" size="icon-sm" title="Desbloquear" disabled={pending} onClick={() => unlockUser(u)}>
-                        <Unlock className="size-4" />
+                        {pendingDn === u.dn ? <Loader2 className="size-4 animate-spin" /> : <Unlock className="size-4" />}
                       </Button>
                     )}
                     <Button
@@ -245,7 +252,13 @@ export function OuContentsPanel({
                       disabled={pending}
                       onClick={() => toggleUserEnabled(u)}
                     >
-                      {u.enabled ? <ShieldOff className="size-4" /> : <ShieldCheck className="size-4" />}
+                      {pendingDn === u.dn ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : u.enabled ? (
+                        <ShieldOff className="size-4" />
+                      ) : (
+                        <ShieldCheck className="size-4" />
+                      )}
                     </Button>
                     <MoveObjectDialog
                       connectionId={connectionId}
@@ -306,7 +319,13 @@ export function OuContentsPanel({
                       disabled={pending}
                       onClick={() => toggleComputerEnabled(c)}
                     >
-                      {c.enabled ? <ShieldOff className="size-4" /> : <ShieldCheck className="size-4" />}
+                      {pendingDn === c.dn ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : c.enabled ? (
+                        <ShieldOff className="size-4" />
+                      ) : (
+                        <ShieldCheck className="size-4" />
+                      )}
                     </Button>
                     <MoveObjectDialog
                       connectionId={connectionId}

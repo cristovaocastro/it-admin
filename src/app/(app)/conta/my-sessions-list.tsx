@@ -1,19 +1,21 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { revokeMySessionAction } from "@/lib/actions/auth-actions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Session } from "@/generated/prisma/client";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 export function MySessionsList({ sessions }: { sessions: Session[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   function handleRevoke(sessionId: string) {
+    setPendingId(sessionId);
     startTransition(async () => {
       const result = await revokeMySessionAction(sessionId);
       if (result?.error) toast.error(result.error);
@@ -21,6 +23,7 @@ export function MySessionsList({ sessions }: { sessions: Session[] }) {
         toast.success("Sessão encerrada.");
         router.refresh();
       }
+      setPendingId(null);
     });
   }
 
@@ -44,7 +47,7 @@ export function MySessionsList({ sessions }: { sessions: Session[] }) {
             </div>
             {active && (
               <Button variant="ghost" size="icon-sm" disabled={pending} onClick={() => handleRevoke(s.id)}>
-                <X className="size-4" />
+                {pendingId === s.id ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
               </Button>
             )}
           </div>

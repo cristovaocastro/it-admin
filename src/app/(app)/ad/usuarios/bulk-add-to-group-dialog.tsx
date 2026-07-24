@@ -92,9 +92,10 @@ export function BulkAddToGroupDialog({
                 key={r.dn}
                 type="button"
                 disabled={applying}
-                className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:opacity-50"
+                className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:opacity-50"
                 onClick={() => applyToGroup(r.dn, r.label)}
               >
+                {applying && <Loader2 className="size-3.5 animate-spin" />}
                 {r.label}
               </button>
             ))}

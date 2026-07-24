@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { ShieldOff, ShieldCheck, Trash2, X } from "lucide-react";
+import { Loader2, ShieldOff, ShieldCheck, Trash2, X } from "lucide-react";
 import type { AdComputerSummary } from "@/lib/ad/types";
 import {
   setAdComputerEnabledAction,
@@ -70,6 +70,7 @@ export function DeleteAdComputerButton({
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
           <AlertDialogAction disabled={pending} onClick={confirmDelete}>
+            {pending && <Loader2 className="size-4 animate-spin" />}
             Excluir
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -140,11 +141,11 @@ function BulkActionsBar({
       <span className="text-sm font-medium">{selected.length} selecionado(s)</span>
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" disabled={pending} onClick={() => bulkSetEnabled(true)}>
-          <ShieldCheck className="size-4" />
+          {pending ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
           Habilitar
         </Button>
         <Button variant="outline" size="sm" disabled={pending} onClick={() => bulkSetEnabled(false)}>
-          <ShieldOff className="size-4" />
+          {pending ? <Loader2 className="size-4 animate-spin" /> : <ShieldOff className="size-4" />}
           Desabilitar
         </Button>
         <MoveObjectDialog
@@ -168,6 +169,7 @@ function BulkActionsBar({
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction disabled={pending} onClick={bulkDelete}>
+                {pending && <Loader2 className="size-4 animate-spin" />}
                 Excluir
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -190,6 +192,7 @@ export function AdComputersTable({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [pendingDn, setPendingDn] = useState<string | null>(null);
   const [selectedDns, setSelectedDns] = useState<Set<string>>(new Set());
 
   const selected = computers.filter((c) => selectedDns.has(c.dn));
@@ -209,6 +212,7 @@ export function AdComputersTable({
   }
 
   function toggleEnabled(c: AdComputerSummary) {
+    setPendingDn(c.dn);
     startTransition(async () => {
       const result = await setAdComputerEnabledAction({
         connectionId,
@@ -221,6 +225,7 @@ export function AdComputersTable({
         toast.success(result?.success ?? "Atualizado.");
         router.refresh();
       }
+      setPendingDn(null);
     });
   }
 
@@ -290,7 +295,13 @@ export function AdComputersTable({
                     disabled={pending}
                     onClick={() => toggleEnabled(c)}
                   >
-                    {c.enabled ? <ShieldOff className="size-4" /> : <ShieldCheck className="size-4" />}
+                    {pendingDn === c.dn ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : c.enabled ? (
+                      <ShieldOff className="size-4" />
+                    ) : (
+                      <ShieldCheck className="size-4" />
+                    )}
                   </Button>
                   <MoveObjectDialog
                     connectionId={connectionId}

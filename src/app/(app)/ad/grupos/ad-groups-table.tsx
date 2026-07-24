@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import type { AdGroupSummary } from "@/lib/ad/types";
 import { deleteAdGroupAction, moveAdGroupAction } from "@/lib/actions/ad-groups-actions";
 import { GroupMembersDialog } from "./group-members-dialog";
@@ -70,6 +70,7 @@ export function DeleteAdGroupButton({
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
           <AlertDialogAction disabled={pending} onClick={confirmDelete}>
+            {pending && <Loader2 className="size-4 animate-spin" />}
             Excluir
           </AlertDialogAction>
         </AlertDialogFooter>

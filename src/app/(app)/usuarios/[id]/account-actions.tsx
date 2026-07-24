@@ -12,26 +12,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Check, Copy, KeyRound, ShieldOff } from "lucide-react";
+import { Check, Copy, KeyRound, Loader2, ShieldOff } from "lucide-react";
 
 export function AccountActions({ userId, isSelf }: { userId: string; isSelf: boolean }) {
   const [pending, startTransition] = useTransition();
+  const [action, setAction] = useState<"password" | "mfa" | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   function handleResetPassword() {
+    setAction("password");
     startTransition(async () => {
       const result = await resetPanelUserPasswordAction(userId);
       if (result?.error) toast.error(result.error);
       else if (result?.tempPassword) setTempPassword(result.tempPassword);
+      setAction(null);
     });
   }
 
   function handleResetMfa() {
+    setAction("mfa");
     startTransition(async () => {
       const result = await resetPanelUserMfaAction(userId);
       if (result?.error) toast.error(result.error);
       else if (result?.success) toast.success(result.success);
+      setAction(null);
     });
   }
 
@@ -39,11 +44,11 @@ export function AccountActions({ userId, isSelf }: { userId: string; isSelf: boo
     <>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" disabled={pending} onClick={handleResetPassword}>
-          <KeyRound className="size-4" />
+          {action === "password" ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
           Redefinir senha
         </Button>
         <Button variant="outline" disabled={pending} onClick={handleResetMfa}>
-          <ShieldOff className="size-4" />
+          {action === "mfa" ? <Loader2 className="size-4 animate-spin" /> : <ShieldOff className="size-4" />}
           Resetar MFA
         </Button>
       </div>

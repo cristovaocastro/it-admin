@@ -28,6 +28,7 @@ export function GroupMembersDialog({ connectionId, group }: { connectionId: stri
   const [members, setMembers] = useState<string[] | null>(null);
   const [loading, startLoading] = useTransition();
   const [mutating, startMutating] = useTransition();
+  const [pendingDn, setPendingDn] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ dn: string; label: string }[]>([]);
   const [searching, startSearch] = useTransition();
@@ -55,6 +56,7 @@ export function GroupMembersDialog({ connectionId, group }: { connectionId: stri
   }
 
   function addMember(memberDn: string) {
+    setPendingDn(memberDn);
     startMutating(async () => {
       const fd = new FormData();
       fd.set("connectionId", connectionId);
@@ -68,10 +70,12 @@ export function GroupMembersDialog({ connectionId, group }: { connectionId: stri
         setMembers((prev) => (prev ? [...prev, memberDn] : [memberDn]));
         router.refresh();
       }
+      setPendingDn(null);
     });
   }
 
   function removeMember(memberDn: string) {
+    setPendingDn(memberDn);
     startMutating(async () => {
       const result = await removeAdGroupMemberAction({ connectionId, groupDn: group.dn, groupLabel: group.name, memberDn });
       if (result?.error) toast.error(result.error);
@@ -80,6 +84,7 @@ export function GroupMembersDialog({ connectionId, group }: { connectionId: stri
         setMembers((prev) => prev?.filter((m) => m !== memberDn) ?? null);
         router.refresh();
       }
+      setPendingDn(null);
     });
   }
 
@@ -113,9 +118,10 @@ export function GroupMembersDialog({ connectionId, group }: { connectionId: stri
                   key={r.dn}
                   type="button"
                   disabled={mutating}
-                  className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:opacity-50"
                   onClick={() => addMember(r.dn)}
                 >
+                  {pendingDn === r.dn && <Loader2 className="size-3.5 animate-spin" />}
                   {r.label}
                 </button>
               ))}
@@ -135,7 +141,7 @@ export function GroupMembersDialog({ connectionId, group }: { connectionId: stri
                     {m.split(",")[0].replace(/^CN=/, "")}
                   </span>
                   <Button variant="ghost" size="icon-sm" disabled={mutating} onClick={() => removeMember(m)}>
-                    <X className="size-4" />
+                    {pendingDn === m ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
                   </Button>
                 </div>
               ))}

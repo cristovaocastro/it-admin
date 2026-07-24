@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, FolderPlus, Pencil, Trash2 } from "lucide-react";
+import { AlertCircle, FolderPlus, Loader2, Pencil, Trash2 } from "lucide-react";
 
 export function CreateOuDialog({
   connectionId,
@@ -188,6 +188,7 @@ export function DeleteOuButton({
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
           <AlertDialogAction disabled={pending} onClick={confirmDelete}>
+            {pending && <Loader2 className="size-4 animate-spin" />}
             Excluir
           </AlertDialogAction>
         </AlertDialogFooter>
