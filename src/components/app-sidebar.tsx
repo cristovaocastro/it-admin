@@ -16,6 +16,11 @@ import {
   FolderTree,
   Flame,
   ListFilter,
+  Cloud,
+  Server,
+  DatabaseBackup,
+  Waypoints,
+  CircleDollarSign,
 } from "lucide-react";
 
 type NavItem = {
@@ -55,6 +60,16 @@ const NAV: NavGroup[] = [
     items: [
       { href: "/firewall/conexoes", label: "Conexões", icon: Flame, roles: ["ADMIN"] },
       { href: "/firewall/uri-lists", label: "URI Lists", icon: ListFilter, roles: ["ADMIN", "OPERATOR"] },
+    ],
+  },
+  {
+    title: "AWS",
+    items: [
+      { href: "/aws/conexoes", label: "Conexões", icon: Cloud, roles: ["ADMIN"] },
+      { href: "/aws/instancias", label: "Instâncias EC2", icon: Server, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/aws/backup", label: "Backup", icon: DatabaseBackup, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/aws/rede", label: "Rede (VPC/VPN)", icon: Waypoints, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/aws/custos", label: "Custos", icon: CircleDollarSign, roles: ["ADMIN", "OPERATOR"] },
     ],
   },
 ];

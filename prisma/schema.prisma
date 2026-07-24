@@ -60,6 +60,7 @@ model User {
   auditLogs      AuditLog[]         @relation("AuditActor")
   adConnections  AdConnection[]     @relation("AdConnectionCreatedBy")
   firewallConnections FirewallConnection[] @relation("FirewallConnectionCreatedBy")
+  awsConnections AwsConnection[]    @relation("AwsConnectionCreatedBy")
 
   @@index([status])
   @@map("users")
@@ -120,6 +121,8 @@ enum AuditEntityType {
   FIREWALL_CONNECTION
   FIREWALL_RULE
   FIREWALL_URI_LIST
+  AWS_CONNECTION
+  AWS_EC2_INSTANCE
   SYSTEM
 }
 
@@ -232,4 +235,39 @@ model FirewallConnection {
   updatedAt   DateTime @updatedAt
 
   @@map("firewall_connections")
+}
+
+// ---------------------------------------------------------------------------
+// AWS — contas gerenciadas pelo painel (EC2, Backup, VPC/VPN/Endpoints, custos)
+// ---------------------------------------------------------------------------
+
+enum AwsTestStatus {
+  NEVER_TESTED
+  SUCCESS
+  FAILURE
+}
+
+model AwsConnection {
+  id   String @id @default(uuid())
+  name String @unique // nome amigável, ex: "AWS Produção"
+
+  accessKeyId              String
+  secretAccessKeyEncrypted String // AES-256-GCM
+
+  defaultRegion String   @default("us-east-1") // usado por serviços globais (STS, Cost Explorer)
+  regions       String[] // regiões monitoradas para EC2/VPC/VPN/Endpoints/Backup
+
+  isActive Boolean @default(true)
+
+  lastTestAt        DateTime?
+  lastTestStatus    AwsTestStatus @default(NEVER_TESTED)
+  lastTestError     String?
+  lastTestLatencyMs Int?
+
+  createdById String?
+  createdBy   User?    @relation("AwsConnectionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("aws_connections")
 }
