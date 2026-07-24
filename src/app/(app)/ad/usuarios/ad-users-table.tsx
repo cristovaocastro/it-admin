@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Lock, ShieldOff, ShieldCheck, Trash2, Unlock, X } from "lucide-react";
+import { Loader2, Lock, ShieldOff, ShieldCheck, Trash2, Unlock, X } from "lucide-react";
 import type { AdUserSummary } from "@/lib/ad/types";
 import {
   setAdUserEnabledAction,
@@ -31,6 +31,7 @@ import { EditAdUserDialog } from "./edit-ad-user-dialog";
 import { UserGroupsDialog } from "./user-groups-dialog";
 import { CloneAdUserDialog } from "./clone-ad-user-dialog";
 import { BulkAddToGroupDialog } from "./bulk-add-to-group-dialog";
+import { BulkResetPasswordDialog } from "./bulk-reset-password-dialog";
 import { MoveObjectDialog } from "../move-object-dialog";
 
 function label(u: AdUserSummary) {
@@ -78,6 +79,7 @@ export function DeleteAdUserButton({
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
           <AlertDialogAction disabled={pending} onClick={confirmDelete}>
+            {pending && <Loader2 className="size-4 animate-spin" />}
             Excluir
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -158,18 +160,19 @@ function BulkActionsBar({
       <span className="text-sm font-medium">{selected.length} selecionado(s)</span>
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" disabled={pending} onClick={() => bulkSetEnabled(true)}>
-          <ShieldCheck className="size-4" />
+          {pending ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
           Habilitar
         </Button>
         <Button variant="outline" size="sm" disabled={pending} onClick={() => bulkSetEnabled(false)}>
-          <ShieldOff className="size-4" />
+          {pending ? <Loader2 className="size-4 animate-spin" /> : <ShieldOff className="size-4" />}
           Desabilitar
         </Button>
         <Button variant="outline" size="sm" disabled={pending} onClick={bulkUnlock}>
-          <Unlock className="size-4" />
+          {pending ? <Loader2 className="size-4 animate-spin" /> : <Unlock className="size-4" />}
           Desbloquear
         </Button>
         <BulkAddToGroupDialog connectionId={connectionId} items={items} onDone={onDone} />
+        <BulkResetPasswordDialog connectionId={connectionId} items={items} onDone={onDone} />
         <MoveObjectDialog
           connectionId={connectionId}
           label={`${items.length} usuário(s)`}
@@ -191,6 +194,7 @@ function BulkActionsBar({
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction disabled={pending} onClick={bulkDelete}>
+                {pending && <Loader2 className="size-4 animate-spin" />}
                 Excluir
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -207,6 +211,7 @@ function BulkActionsBar({
 export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; connectionId: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [pendingDn, setPendingDn] = useState<string | null>(null);
   const [selectedDns, setSelectedDns] = useState<Set<string>>(new Set());
 
   const selected = users.filter((u) => selectedDns.has(u.dn));
@@ -226,6 +231,7 @@ export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; 
   }
 
   function toggleEnabled(u: AdUserSummary) {
+    setPendingDn(u.dn);
     startTransition(async () => {
       const result = await setAdUserEnabledAction({
         connectionId,
@@ -238,10 +244,12 @@ export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; 
         toast.success(result?.success ?? "Atualizado.");
         router.refresh();
       }
+      setPendingDn(null);
     });
   }
 
   function unlock(u: AdUserSummary) {
+    setPendingDn(u.dn);
     startTransition(async () => {
       const result = await unlockAdUserAction({ connectionId, dn: u.dn, label: label(u) });
       if (result?.error) toast.error(result.error);
@@ -249,6 +257,7 @@ export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; 
         toast.success(result?.success ?? "Desbloqueado.");
         router.refresh();
       }
+      setPendingDn(null);
     });
   }
 
@@ -276,6 +285,7 @@ export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; 
             <TableHead>Login / Departamento / Cargo</TableHead>
             <TableHead>Telefone / E-mail</TableHead>
             <TableHead>Descrição</TableHead>
+            <TableHead>Último acesso</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Ações</TableHead>
           </TableRow>
@@ -303,6 +313,21 @@ export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; 
               <TableCell className="max-w-[220px] truncate text-muted-foreground" title={u.description}>
                 {u.description || "—"}
               </TableCell>
+              <TableCell className="text-muted-foreground">
+                {u.lastLogon ? (
+                  <span
+                    className={
+                      new Date().getTime() - new Date(u.lastLogon).getTime() > 90 * 24 * 60 * 60 * 1000
+                        ? "text-amber-600 dark:text-amber-500"
+                        : undefined
+                    }
+                  >
+                    {new Date(u.lastLogon).toLocaleDateString("pt-BR")}
+                  </span>
+                ) : (
+                  <span className="text-amber-600 dark:text-amber-500">nunca</span>
+                )}
+              </TableCell>
               <TableCell>
                 <div className="flex flex-wrap gap-1">
                   <Badge variant={u.enabled ? "secondary" : "outline"}>{u.enabled ? "habilitado" : "desabilitado"}</Badge>
@@ -328,7 +353,7 @@ export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; 
                   <ResetAdPasswordDialog connectionId={connectionId} user={u} />
                   {u.locked && (
                     <Button variant="ghost" size="icon-sm" title="Desbloquear" disabled={pending} onClick={() => unlock(u)}>
-                      <Unlock className="size-4" />
+                      {pendingDn === u.dn ? <Loader2 className="size-4 animate-spin" /> : <Unlock className="size-4" />}
                     </Button>
                   )}
                   <Button
@@ -338,7 +363,13 @@ export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; 
                     disabled={pending}
                     onClick={() => toggleEnabled(u)}
                   >
-                    {u.enabled ? <ShieldOff className="size-4" /> : <ShieldCheck className="size-4" />}
+                    {pendingDn === u.dn ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : u.enabled ? (
+                      <ShieldOff className="size-4" />
+                    ) : (
+                      <ShieldCheck className="size-4" />
+                    )}
                   </Button>
                   <MoveObjectDialog
                     connectionId={connectionId}

@@ -12,7 +12,15 @@ import { UserSearchForm } from "./user-search-form";
 import { AdUsersTable } from "./ad-users-table";
 import { CreateAdUserDialog } from "./create-ad-user-dialog";
 
-type SearchParams = { conexao?: string; q?: string };
+type SearchParams = { conexao?: string; q?: string; acesso?: string };
+
+const LAST_LOGON_FILTERS: Record<string, "never" | number> = {
+  nunca: "never",
+  "30": 30,
+  "60": 60,
+  "90": 90,
+  "180": 180,
+};
 
 export default async function AdUsersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requireRole(["ADMIN", "OPERATOR"]);
@@ -45,7 +53,8 @@ export default async function AdUsersPage({ searchParams }: { searchParams: Prom
   let searchError: string | null = null;
   try {
     const config = await loadAdConnectionConfig(connection.id);
-    users = await searchAdUsers(config, { query: sp.q });
+    const lastLogon = sp.acesso ? LAST_LOGON_FILTERS[sp.acesso] : undefined;
+    users = await searchAdUsers(config, { query: sp.q, lastLogon });
   } catch (err) {
     searchError = err instanceof AdOperationError ? err.message : "Falha ao consultar o Active Directory.";
   }
@@ -62,7 +71,7 @@ export default async function AdUsersPage({ searchParams }: { searchParams: Prom
 
       <div className="flex flex-wrap items-end gap-2">
         <ConnectionPicker connections={connections} selectedId={connection.id} basePath="/ad/usuarios" />
-        <UserSearchForm connectionId={connection.id} defaultQuery={sp.q} />
+        <UserSearchForm connectionId={connection.id} defaultQuery={sp.q} defaultLastLogon={sp.acesso} />
       </div>
 
       {searchError ? (

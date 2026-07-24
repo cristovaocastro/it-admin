@@ -18,7 +18,7 @@ import {
   moveAdUser,
 } from "@/lib/ad/users";
 import { addAdGroupMember } from "@/lib/ad/groups";
-import { parentOf, rdnOf } from "@/lib/ad/util";
+import { parentOf, rdnOf, generateRandomPassword } from "@/lib/ad/util";
 import { AdOperationError } from "@/lib/ad/types";
 import { withAdErrorHandling } from "@/lib/ad/error-handling";
 
@@ -242,6 +242,50 @@ export async function resetAdUserPasswordAction(_prev: ActionState, formData: Fo
   if ("error" in result) return { error: result.error };
   revalidatePath(pathFor(parsed.data.connectionId));
   return { success: "Senha redefinida com sucesso." };
+}
+
+/** Redefine a senha de um usuário como parte de uma ação em lote. Se `password` não for informado,
+ * gera uma senha aleatória por usuário e a retorna (não persistida em nenhum lugar além da resposta). */
+export async function resetAdUserPasswordBulkAction(params: {
+  connectionId: string;
+  dn: string;
+  label: string;
+  password?: string;
+  forceChangeAtNextLogon: boolean;
+  unlockAccount: boolean;
+}): Promise<ActionState & { password?: string }> {
+  const actor = await requireRole(["ADMIN", "OPERATOR"]);
+  const config = await loadAdConnectionConfig(params.connectionId);
+  const password = params.password || generateRandomPassword();
+
+  const result = await withAdErrorHandling(async () => {
+    await setAdUserPassword(config, params.dn, password, params.forceChangeAtNextLogon);
+    if (params.unlockAccount) await unlockAdUser(config, params.dn);
+  });
+
+  await logAudit({
+    actor: { id: actor.id, name: actor.username },
+    action: "ad_user.password_reset",
+    entityType: "AD_USER",
+    entityId: params.dn,
+    entityLabel: params.label,
+    description:
+      "error" in result
+        ? `Falha ao redefinir senha do usuário AD "${params.label}" (ação em lote): ${result.error}`
+        : `Senha do usuário AD "${params.label}" redefinida em lote${params.unlockAccount ? " e conta desbloqueada" : ""}`,
+    metadata: {
+      connectionId: params.connectionId,
+      bulk: true,
+      generated: !params.password,
+      forceChangeAtNextLogon: params.forceChangeAtNextLogon,
+      unlockAccount: params.unlockAccount,
+    },
+    status: "error" in result ? "FAILURE" : "SUCCESS",
+  });
+
+  if ("error" in result) return { error: result.error };
+  revalidatePath(pathFor(params.connectionId));
+  return { success: "Senha redefinida.", password };
 }
 
 export async function setAdUserEnabledAction(params: {

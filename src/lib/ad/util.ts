@@ -1,3 +1,5 @@
+import { randomInt } from "node:crypto";
+
 // Bits do atributo userAccountControl relevantes para este painel.
 // Referência: https://learn.microsoft.com/pt-br/troubleshoot/windows-server/identity/useraccountcontrol-manipulate-account-properties
 export const UAC = {
@@ -90,6 +92,30 @@ export function parseAccountExpires(value?: string): Date | undefined {
 /** Codifica uma data de expiração de conta no formato FILETIME do AD; `null` grava o sentinela "nunca expira". */
 export function encodeAccountExpires(date: Date | null): string {
   if (!date) return ACCOUNT_NEVER_EXPIRES;
+  return encodeWindowsFileTime(date);
+}
+
+/** Codifica um Date no formato FILETIME do AD (100ns desde 1601-01-01) — usado em filtros LDAP sobre atributos como lastLogonTimestamp. */
+export function encodeWindowsFileTime(date: Date): string {
   const ticks = (BigInt(date.getTime()) + BigInt(WINDOWS_EPOCH_OFFSET_MS)) * BigInt(10000);
   return ticks.toString();
+}
+
+const PASSWORD_CHAR_SETS = [
+  "ABCDEFGHJKLMNPQRSTUVWXYZ", // maiúsculas, sem I/O ambíguos
+  "abcdefghijkmnpqrstuvwxyz", // minúsculas, sem l/o ambíguos
+  "23456789", // dígitos, sem 0/1 ambíguos
+  "!@#$%&*-_+=",
+];
+
+/** Gera uma senha aleatória forte (maiúscula, minúscula, dígito e símbolo garantidos), usando o CSPRNG do Node. */
+export function generateRandomPassword(length = 14): string {
+  const all = PASSWORD_CHAR_SETS.join("");
+  const chars = PASSWORD_CHAR_SETS.map((set) => set[randomInt(set.length)]);
+  while (chars.length < length) chars.push(all[randomInt(all.length)]);
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
 }

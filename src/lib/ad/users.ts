@@ -11,6 +11,7 @@ import {
   escapeFilterValue,
   encodeAdPassword,
   encodeAccountExpires,
+  encodeWindowsFileTime,
   rdnOf,
   parseWindowsFileTime,
   parseAccountExpires,
@@ -70,16 +71,28 @@ export type SearchUsersParams = {
   limit?: number;
   /** "one" busca só os filhos diretos da OU (usado na árvore); "sub" (padrão) busca recursivamente. */
   scope?: "sub" | "one";
+  /** Filtra por último logon: "never" = nunca logou; número = sem logon há ao menos N dias (inclui quem nunca logou). */
+  lastLogon?: "never" | number;
 };
 
 export async function searchAdUsers(config: AdConnectionConfig, params: SearchUsersParams = {}) {
   const base = params.ou || config.usersOU || config.baseDN;
   const limit = params.limit ?? 200;
-  let filter = "(&(objectCategory=person)(objectClass=user))";
+  const clauses = ["(objectCategory=person)", "(objectClass=user)"];
   if (params.query?.trim()) {
     const q = escapeFilterValue(params.query.trim());
-    filter = `(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=*${q}*)(cn=*${q}*)(displayName=*${q}*)(mail=*${q}*)(department=*${q}*)(title=*${q}*)(description=*${q}*)))`;
+    clauses.push(
+      `(|(sAMAccountName=*${q}*)(cn=*${q}*)(displayName=*${q}*)(mail=*${q}*)(department=*${q}*)(title=*${q}*)(description=*${q}*))`
+    );
   }
+  if (params.lastLogon === "never") {
+    clauses.push("(!(lastLogonTimestamp=*))");
+  } else if (typeof params.lastLogon === "number") {
+    const cutoff = encodeWindowsFileTime(new Date(Date.now() - params.lastLogon * 24 * 60 * 60 * 1000));
+    // Inclui quem nunca logou: quem nunca acessou está, por definição, inativo há mais de N dias.
+    clauses.push(`(|(!(lastLogonTimestamp=*))(lastLogonTimestamp<=${cutoff}))`);
+  }
+  const filter = `(&${clauses.join("")})`;
 
   return withAdClient(config, async (client) => {
     const entries = await ldapSearch(client, base, {
