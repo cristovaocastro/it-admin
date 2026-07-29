@@ -20,7 +20,15 @@ import {
   addAdGroupMemberAction,
   removeAdGroupMemberAction,
 } from "@/lib/actions/ad-groups-actions";
-import { searchAdUsersForPickerAction } from "@/lib/actions/ad-search-actions";
+import { searchAdUsersForPickerAction, searchAdGroupsForPickerAction } from "@/lib/actions/ad-search-actions";
+import { isProtectedAdGroupName } from "@/lib/ad/protected-principals";
+
+type PickerMode = "user" | "group";
+
+/** Nome de exibição de um membro (usuário ou grupo aninhado) a partir do DN, ex: "TI-Suporte" de "CN=TI-Suporte,OU=...". */
+function memberLabel(dn: string) {
+  return dn.split(",")[0].replace(/^[A-Za-z]+=/, "");
+}
 
 export function GroupMembersDialog({ connectionId, group }: { connectionId: string; group: AdGroupSummary }) {
   const router = useRouter();
@@ -29,9 +37,11 @@ export function GroupMembersDialog({ connectionId, group }: { connectionId: stri
   const [loading, startLoading] = useTransition();
   const [mutating, startMutating] = useTransition();
   const [pendingDn, setPendingDn] = useState<string | null>(null);
+  const [mode, setMode] = useState<PickerMode>("user");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ dn: string; label: string }[]>([]);
   const [searching, startSearch] = useTransition();
+  const protectedGroup = isProtectedAdGroupName(group.name);
 
   useEffect(() => {
     if (!open) return;
@@ -49,10 +59,22 @@ export function GroupMembersDialog({ connectionId, group }: { connectionId: stri
 
   function handleSearch() {
     startSearch(async () => {
-      const result = await searchAdUsersForPickerAction(connectionId, query);
-      if ("error" in result) toast.error(result.error);
-      setResults(result.users ?? []);
+      if (mode === "group") {
+        const result = await searchAdGroupsForPickerAction(connectionId, query);
+        if ("error" in result) toast.error(result.error);
+        setResults((result.groups ?? []).filter((g) => g.dn !== group.dn));
+      } else {
+        const result = await searchAdUsersForPickerAction(connectionId, query);
+        if ("error" in result) toast.error(result.error);
+        setResults(result.users ?? []);
+      }
     });
+  }
+
+  function switchMode(next: PickerMode) {
+    setMode(next);
+    setQuery("");
+    setResults([]);
   }
 
   function addMember(memberDn: string) {
@@ -96,13 +118,36 @@ export function GroupMembersDialog({ connectionId, group }: { connectionId: stri
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Membros de {group.name}</DialogTitle>
-          <DialogDescription>Adicione ou remova membros diretamente no Active Directory.</DialogDescription>
+          <DialogDescription>
+            {protectedGroup
+              ? "Grupo administrativo protegido — a lista de membros é somente leitura por aqui."
+              : "Adicione ou remova membros diretamente no Active Directory."}
+          </DialogDescription>
         </DialogHeader>
 
+        {!protectedGroup && (
         <div className="space-y-2">
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              variant={mode === "user" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => switchMode("user")}
+            >
+              Usuários
+            </Button>
+            <Button
+              type="button"
+              variant={mode === "group" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => switchMode("group")}
+            >
+              Grupos
+            </Button>
+          </div>
           <div className="flex gap-2">
             <Input
-              placeholder="Buscar usuário para adicionar..."
+              placeholder={mode === "group" ? "Buscar grupo para incluir..." : "Buscar usuário para adicionar..."}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSearch())}
@@ -128,6 +173,7 @@ export function GroupMembersDialog({ connectionId, group }: { connectionId: stri
             </div>
           )}
         </div>
+        )}
 
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Membros atuais</p>
@@ -138,11 +184,13 @@ export function GroupMembersDialog({ connectionId, group }: { connectionId: stri
               {members.map((m) => (
                 <div key={m} className="flex items-center justify-between gap-2 rounded-md border px-3 py-1.5 text-sm">
                   <span className="truncate" title={m}>
-                    {m.split(",")[0].replace(/^CN=/, "")}
+                    {memberLabel(m)}
                   </span>
-                  <Button variant="ghost" size="icon-sm" disabled={mutating} onClick={() => removeMember(m)}>
-                    {pendingDn === m ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
-                  </Button>
+                  {!protectedGroup && (
+                    <Button variant="ghost" size="icon-sm" disabled={mutating} onClick={() => removeMember(m)}>
+                      {pendingDn === m ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>

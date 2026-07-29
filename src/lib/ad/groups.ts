@@ -1,9 +1,11 @@
 import "server-only";
 import * as ldap from "ldapjs";
+import type { Client } from "ldapjs";
 import { withAdClient, ldapSearch, ldapAdd, ldapModify, ldapDel, ldapModifyDN } from "@/lib/ad/client";
 import type { AdConnectionConfig, AdGroupDetail, AdGroupScope, AdGroupSummary } from "@/lib/ad/types";
 import { AdOperationError } from "@/lib/ad/types";
-import { escapeDnValue, escapeFilterValue, rdnOf } from "@/lib/ad/util";
+import { escapeDnValue, escapeFilterValue, parentOf, rdnOf } from "@/lib/ad/util";
+import { isProtectedAdGroupName } from "@/lib/ad/protected-principals";
 
 const GROUP_ATTRIBUTES = ["distinguishedName", "cn", "description", "member", "groupType"];
 
@@ -32,6 +34,26 @@ function toGroupSummary(entry: Record<string, unknown>): AdGroupSummary {
     scope: scopeFromGroupType(groupType),
     security: (groupType & GROUP_TYPE.SECURITY) !== 0,
   };
+}
+
+/**
+ * Bloqueia qualquer alteração num grupo administrativo protegido do AD (renomear, descrição,
+ * mover, excluir, e — o mais importante — adicionar/remover membro, que é como alguém se
+ * autopromoveria a admin de domínio por aqui). Consulta o `cn` real do DN em vez de confiar em
+ * valor vindo do formulário/UI.
+ */
+async function assertGroupIsMutable(client: Client, dn: string): Promise<void> {
+  const entries = await ldapSearch(client, dn, {
+    scope: "base",
+    filter: "(objectClass=group)",
+    attributes: ["cn"],
+  });
+  const name = entries[0]?.cn ? String(entries[0].cn) : undefined;
+  if (isProtectedAdGroupName(name)) {
+    throw new AdOperationError(
+      `"${name}" é um grupo administrativo protegido do AD e não pode ser alterado por este painel (nem seus membros).`
+    );
+  }
 }
 
 export type SearchGroupsParams = { query?: string; ou?: string; limit?: number; scope?: "sub" | "one" };
@@ -102,6 +124,7 @@ export async function createAdGroup(config: AdConnectionConfig, params: CreateAd
 
 export async function addAdGroupMember(config: AdConnectionConfig, groupDn: string, memberDn: string) {
   return withAdClient(config, async (client) => {
+    await assertGroupIsMutable(client, groupDn);
     await ldapModify(
       client,
       groupDn,
@@ -115,6 +138,7 @@ export async function addAdGroupMember(config: AdConnectionConfig, groupDn: stri
 
 export async function removeAdGroupMember(config: AdConnectionConfig, groupDn: string, memberDn: string) {
   return withAdClient(config, async (client) => {
+    await assertGroupIsMutable(client, groupDn);
     await ldapModify(
       client,
       groupDn,
@@ -126,14 +150,50 @@ export async function removeAdGroupMember(config: AdConnectionConfig, groupDn: s
   });
 }
 
+export type UpdateAdGroupParams = { name?: string; description?: string };
+
+/** Renomeia (CN + sAMAccountName) e/ou atualiza a descrição de um grupo. Retorna o DN atual (novo, se houve rename). */
+export async function updateAdGroup(config: AdConnectionConfig, dn: string, params: UpdateAdGroupParams) {
+  return withAdClient(config, async (client) => {
+    await assertGroupIsMutable(client, dn);
+    let currentDn = dn;
+    if (params.name) {
+      const newRdn = `CN=${escapeDnValue(params.name)}`;
+      if (newRdn !== rdnOf(dn)) {
+        await ldapModifyDN(client, dn, newRdn);
+        currentDn = `${newRdn},${parentOf(dn)}`;
+      }
+      // sAMAccountName não acompanha o CN automaticamente no rename via modifyDN.
+      await ldapModify(
+        client,
+        currentDn,
+        new ldap.Change({ operation: "replace", modification: { type: "sAMAccountName", values: [params.name] } })
+      );
+    }
+    if (params.description !== undefined) {
+      await ldapModify(
+        client,
+        currentDn,
+        new ldap.Change({
+          operation: params.description ? "replace" : "delete",
+          modification: { type: "description", values: params.description ? [params.description] : [] },
+        })
+      );
+    }
+    return currentDn;
+  });
+}
+
 export async function deleteAdGroup(config: AdConnectionConfig, dn: string) {
   return withAdClient(config, async (client) => {
+    await assertGroupIsMutable(client, dn);
     await ldapDel(client, dn);
   });
 }
 
 export async function moveAdGroup(config: AdConnectionConfig, dn: string, newOuDn: string) {
   return withAdClient(config, async (client) => {
+    await assertGroupIsMutable(client, dn);
     await ldapModifyDN(client, dn, `${rdnOf(dn)},${newOuDn}`);
   });
 }

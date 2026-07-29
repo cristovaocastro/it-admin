@@ -17,10 +17,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, ShieldUser, Trash2 } from "lucide-react";
 import type { AdGroupSummary } from "@/lib/ad/types";
+import { isProtectedAdGroupName } from "@/lib/ad/protected-principals";
 import { deleteAdGroupAction, moveAdGroupAction } from "@/lib/actions/ad-groups-actions";
 import { GroupMembersDialog } from "./group-members-dialog";
+import { EditAdGroupDialog } from "./edit-ad-group-dialog";
 import { MoveObjectDialog } from "../move-object-dialog";
 
 const SCOPE_LABEL: Record<AdGroupSummary["scope"], string> = {
@@ -95,9 +97,18 @@ export function AdGroupsTable({ groups, connectionId }: { groups: AdGroupSummary
         </TableRow>
       </TableHeader>
       <TableBody>
-        {groups.map((g) => (
+        {groups.map((g) => {
+          const protectedGroup = isProtectedAdGroupName(g.name);
+          return (
           <TableRow key={g.dn}>
-            <TableCell className="font-medium">{g.name}</TableCell>
+            <TableCell className="font-medium">
+              {g.name}
+              {protectedGroup && (
+                <Badge variant="destructive" className="ml-2 gap-1">
+                  <ShieldUser className="size-3" /> protegido
+                </Badge>
+              )}
+            </TableCell>
             <TableCell>
               <Badge variant={g.security ? "secondary" : "outline"}>
                 {g.security ? "Segurança" : "Distribuição"}
@@ -111,17 +122,23 @@ export function AdGroupsTable({ groups, connectionId }: { groups: AdGroupSummary
             <TableCell>
               <div className="flex items-center justify-end gap-0.5">
                 <GroupMembersDialog connectionId={connectionId} group={g} />
-                <MoveObjectDialog
-                  connectionId={connectionId}
-                  label={g.name}
-                  onMove={(newOuDn) => moveAdGroupAction({ connectionId, dn: g.dn, label: g.name, newOuDn })}
-                  onSuccess={() => router.refresh()}
-                />
-                <DeleteAdGroupButton connectionId={connectionId} group={g} />
+                {!protectedGroup && (
+                  <>
+                    <EditAdGroupDialog connectionId={connectionId} group={g} />
+                    <MoveObjectDialog
+                      connectionId={connectionId}
+                      label={g.name}
+                      onMove={(newOuDn) => moveAdGroupAction({ connectionId, dn: g.dn, label: g.name, newOuDn })}
+                      onSuccess={() => router.refresh()}
+                    />
+                    <DeleteAdGroupButton connectionId={connectionId} group={g} />
+                  </>
+                )}
               </div>
             </TableCell>
           </TableRow>
-        ))}
+          );
+        })}
         {groups.length === 0 && (
           <TableRow>
             <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">

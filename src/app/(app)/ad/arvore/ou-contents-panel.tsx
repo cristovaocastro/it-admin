@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, Folder, Loader2, Lock, ShieldCheck, ShieldOff, Unlock, UserCog, UsersRound, Monitor } from "lucide-react";
+import { AlertTriangle, Folder, Loader2, Lock, ShieldCheck, ShieldOff, ShieldUser, Unlock, UserCog, UsersRound, Monitor } from "lucide-react";
+import { isProtectedAdUserName, isProtectedAdGroupName } from "@/lib/ad/protected-principals";
 import { getOuContentsAction } from "@/lib/actions/ad-tree-actions";
 import { moveAdOuAction } from "@/lib/actions/ad-ou-actions";
 import { setAdUserEnabledAction, unlockAdUserAction, moveAdUserAction } from "@/lib/actions/ad-users-actions";
@@ -17,6 +18,7 @@ import { ResetAdPasswordDialog } from "../usuarios/reset-ad-password-dialog";
 import { EditAdUserDialog } from "../usuarios/edit-ad-user-dialog";
 import { DeleteAdUserButton } from "../usuarios/ad-users-table";
 import { GroupMembersDialog } from "../grupos/group-members-dialog";
+import { EditAdGroupDialog } from "../grupos/edit-ad-group-dialog";
 import { DeleteAdGroupButton } from "../grupos/ad-groups-table";
 import { EditAdComputerDialog } from "../computadores/edit-ad-computer-dialog";
 import { DeleteAdComputerButton } from "../computadores/ad-computers-table";
@@ -218,9 +220,18 @@ export function OuContentsPanel({
               </TableRow>
             ))}
 
-            {data.users.map((u) => (
+            {data.users.map((u) => {
+              const protectedUser = isProtectedAdUserName(u.sAMAccountName);
+              return (
               <TableRow key={u.dn}>
-                <TableCell className="font-medium">{userLabel(u)}</TableCell>
+                <TableCell className="font-medium">
+                  {userLabel(u)}
+                  {protectedUser && (
+                    <Badge variant="destructive" className="ml-2 gap-1">
+                      <ShieldUser className="size-3" /> protegido
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge variant="secondary">
                     <UserCog className="size-3" /> Usuário
@@ -237,6 +248,9 @@ export function OuContentsPanel({
                   </div>
                 </TableCell>
                 <TableCell>
+                  {protectedUser ? (
+                    <p className="text-right text-xs text-muted-foreground">conta protegida — somente leitura</p>
+                  ) : (
                   <div className="flex items-center justify-end gap-0.5">
                     <EditAdUserDialog connectionId={connectionId} user={u} />
                     <ResetAdPasswordDialog connectionId={connectionId} user={u} />
@@ -268,13 +282,24 @@ export function OuContentsPanel({
                     />
                     <DeleteAdUserButton connectionId={connectionId} user={u} onSuccess={reload} />
                   </div>
+                  )}
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
 
-            {data.groups.map((g) => (
+            {data.groups.map((g) => {
+              const protectedGroup = isProtectedAdGroupName(g.name);
+              return (
               <TableRow key={g.dn}>
-                <TableCell className="font-medium">{g.name}</TableCell>
+                <TableCell className="font-medium">
+                  {g.name}
+                  {protectedGroup && (
+                    <Badge variant="destructive" className="ml-2 gap-1">
+                      <ShieldUser className="size-3" /> protegido
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge variant="secondary">
                     <UsersRound className="size-3" /> Grupo
@@ -284,17 +309,23 @@ export function OuContentsPanel({
                 <TableCell>
                   <div className="flex items-center justify-end gap-0.5">
                     <GroupMembersDialog connectionId={connectionId} group={g} />
-                    <MoveObjectDialog
-                      connectionId={connectionId}
-                      label={g.name}
-                      onMove={(newOuDn) => moveAdGroupAction({ connectionId, dn: g.dn, label: g.name, newOuDn })}
-                      onSuccess={reload}
-                    />
-                    <DeleteAdGroupButton connectionId={connectionId} group={g} onSuccess={reload} />
+                    {!protectedGroup && (
+                      <>
+                        <EditAdGroupDialog connectionId={connectionId} group={g} onSuccess={reload} />
+                        <MoveObjectDialog
+                          connectionId={connectionId}
+                          label={g.name}
+                          onMove={(newOuDn) => moveAdGroupAction({ connectionId, dn: g.dn, label: g.name, newOuDn })}
+                          onSuccess={reload}
+                        />
+                        <DeleteAdGroupButton connectionId={connectionId} group={g} onSuccess={reload} />
+                      </>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
 
             {data.computers.map((c) => (
               <TableRow key={c.dn}>

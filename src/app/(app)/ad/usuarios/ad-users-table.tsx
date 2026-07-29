@@ -18,8 +18,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Lock, ShieldOff, ShieldCheck, Trash2, Unlock, X } from "lucide-react";
+import { Loader2, Lock, ShieldOff, ShieldCheck, ShieldUser, Trash2, Unlock, X } from "lucide-react";
 import type { AdUserSummary } from "@/lib/ad/types";
+import { isProtectedAdUserName } from "@/lib/ad/protected-principals";
 import {
   setAdUserEnabledAction,
   unlockAdUserAction,
@@ -291,16 +292,26 @@ export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; 
           </TableRow>
         </TableHeader>
         <TableBody>
-          {users.map((u) => (
+          {users.map((u) => {
+            const protectedUser = isProtectedAdUserName(u.sAMAccountName);
+            return (
             <TableRow key={u.dn}>
               <TableCell>
                 <Checkbox
                   checked={selectedDns.has(u.dn)}
                   onCheckedChange={(checked) => toggleOne(u.dn, checked === true)}
                   aria-label={`Selecionar ${label(u)}`}
+                  disabled={protectedUser}
                 />
               </TableCell>
-              <TableCell className="font-medium">{u.displayName || "—"}</TableCell>
+              <TableCell className="font-medium">
+                {u.displayName || "—"}
+                {protectedUser && (
+                  <Badge variant="destructive" className="ml-2 gap-1">
+                    <ShieldUser className="size-3" /> protegido
+                  </Badge>
+                )}
+              </TableCell>
               <TableCell className="text-muted-foreground">
                 <div>{u.sAMAccountName}</div>
                 <div className="text-xs text-muted-foreground">{u.department || "—"}</div>
@@ -346,6 +357,9 @@ export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; 
                 </div>
               </TableCell>
               <TableCell>
+                {protectedUser ? (
+                  <p className="text-right text-xs text-muted-foreground">conta protegida — somente leitura</p>
+                ) : (
                 <div className="flex items-center justify-end gap-0.5">
                   <EditAdUserDialog connectionId={connectionId} user={u} />
                   <UserGroupsDialog connectionId={connectionId} user={u} />
@@ -379,9 +393,11 @@ export function AdUsersTable({ users, connectionId }: { users: AdUserSummary[]; 
                   />
                   <DeleteAdUserButton connectionId={connectionId} user={u} />
                 </div>
+                )}
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
           {users.length === 0 && (
             <TableRow>
               <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">

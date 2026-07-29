@@ -1,8 +1,10 @@
 import "server-only";
 import * as ldap from "ldapjs";
+import type { Client } from "ldapjs";
 import { withAdClient, ldapSearch, ldapAdd, ldapModify, ldapDel, ldapModifyDN } from "@/lib/ad/client";
 import type { AdConnectionConfig, AdUserSummary } from "@/lib/ad/types";
 import { AdOperationError } from "@/lib/ad/types";
+import { isProtectedAdUserName } from "@/lib/ad/protected-principals";
 import {
   UAC,
   isUacEnabled,
@@ -63,6 +65,26 @@ function toUserSummary(entry: Record<string, unknown>): AdUserSummary {
     lastLogon: parseWindowsFileTime(entry.lastLogonTimestamp as string | undefined)?.toISOString(),
     memberOf: memberOf.map(String),
   } satisfies AdUserSummary;
+}
+
+/**
+ * Bloqueia qualquer alteração (senha, ativar/desativar, mover, excluir, editar atributos...) em
+ * contas administrativas protegidas do AD (Administrator, krbtgt) — consulta o `sAMAccountName`
+ * real do DN em vez de confiar em valores vindos do formulário/UI, então nem uma sessão
+ * comprometida do painel consegue contornar isso passando outro nome.
+ */
+async function assertUserIsMutable(client: Client, dn: string): Promise<void> {
+  const entries = await ldapSearch(client, dn, {
+    scope: "base",
+    filter: "(objectClass=user)",
+    attributes: ["sAMAccountName"],
+  });
+  const sAMAccountName = entries[0]?.sAMAccountName ? String(entries[0].sAMAccountName) : undefined;
+  if (isProtectedAdUserName(sAMAccountName)) {
+    throw new AdOperationError(
+      `"${sAMAccountName}" é uma conta administrativa protegida do AD e não pode ser alterada por este painel.`
+    );
+  }
 }
 
 export type SearchUsersParams = {
@@ -200,6 +222,7 @@ export async function setAdUserPassword(
     );
   }
   return withAdClient(config, async (client) => {
+    await assertUserIsMutable(client, dn);
     const changes: ldap.Change[] = [
       new ldap.Change({
         operation: "replace",
@@ -221,9 +244,14 @@ export async function setAdUserEnabled(config: AdConnectionConfig, dn: string, e
     const entries = await ldapSearch(client, dn, {
       scope: "base",
       filter: "(objectClass=user)",
-      attributes: ["userAccountControl"],
+      attributes: ["userAccountControl", "sAMAccountName"],
     });
     if (entries.length === 0) throw new AdOperationError("Usuário não encontrado no AD.");
+    if (isProtectedAdUserName(entries[0].sAMAccountName ? String(entries[0].sAMAccountName) : undefined)) {
+      throw new AdOperationError(
+        `"${entries[0].sAMAccountName}" é uma conta administrativa protegida do AD e não pode ser alterada por este painel.`
+      );
+    }
     const currentUac = Number(entries[0].userAccountControl ?? UAC.NORMAL_ACCOUNT);
     const newUac = toggleDisabledBit(currentUac, !enabled);
     await ldapModify(
@@ -242,9 +270,14 @@ export async function setAdUserPasswordNeverExpires(config: AdConnectionConfig, 
     const entries = await ldapSearch(client, dn, {
       scope: "base",
       filter: "(objectClass=user)",
-      attributes: ["userAccountControl"],
+      attributes: ["userAccountControl", "sAMAccountName"],
     });
     if (entries.length === 0) throw new AdOperationError("Usuário não encontrado no AD.");
+    if (isProtectedAdUserName(entries[0].sAMAccountName ? String(entries[0].sAMAccountName) : undefined)) {
+      throw new AdOperationError(
+        `"${entries[0].sAMAccountName}" é uma conta administrativa protegida do AD e não pode ser alterada por este painel.`
+      );
+    }
     const currentUac = Number(entries[0].userAccountControl ?? UAC.NORMAL_ACCOUNT);
     const newUac = neverExpires ? currentUac | UAC.DONT_EXPIRE_PASSWORD : currentUac & ~UAC.DONT_EXPIRE_PASSWORD;
     await ldapModify(
@@ -260,6 +293,7 @@ export async function setAdUserPasswordNeverExpires(config: AdConnectionConfig, 
 
 export async function setAdUserAccountExpires(config: AdConnectionConfig, dn: string, expiresAt: Date | null) {
   return withAdClient(config, async (client) => {
+    await assertUserIsMutable(client, dn);
     await ldapModify(
       client,
       dn,
@@ -273,6 +307,7 @@ export async function setAdUserAccountExpires(config: AdConnectionConfig, dn: st
 
 export async function unlockAdUser(config: AdConnectionConfig, dn: string) {
   return withAdClient(config, async (client) => {
+    await assertUserIsMutable(client, dn);
     await ldapModify(
       client,
       dn,
@@ -299,6 +334,7 @@ export async function updateAdUser(config: AdConnectionConfig, dn: string, param
   const entries = Object.entries(params).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return;
   return withAdClient(config, async (client) => {
+    await assertUserIsMutable(client, dn);
     const changes = entries.map(
       ([type, value]) =>
         new ldap.Change({
@@ -312,12 +348,14 @@ export async function updateAdUser(config: AdConnectionConfig, dn: string, param
 
 export async function moveAdUser(config: AdConnectionConfig, dn: string, newOuDn: string) {
   return withAdClient(config, async (client) => {
+    await assertUserIsMutable(client, dn);
     await ldapModifyDN(client, dn, `${rdnOf(dn)},${newOuDn}`);
   });
 }
 
 export async function deleteAdUser(config: AdConnectionConfig, dn: string) {
   return withAdClient(config, async (client) => {
+    await assertUserIsMutable(client, dn);
     await ldapDel(client, dn);
   });
 }
