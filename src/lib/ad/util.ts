@@ -25,9 +25,16 @@ export function escapeDnValue(value: string): string {
   return result;
 }
 
-/** Escapa um valor para uso seguro em um filtro LDAP, conforme RFC 4515. */
+/**
+ * Escapa um valor para uso seguro em um filtro LDAP, conforme RFC 4515 (só `\`, `*`, `(`, `)` e
+ * NUL exigem escape). Espaço NÃO é escapado: embora a RFC permita escapar qualquer caractere,
+ * confirmado contra o AD real que esse servidor não trata `\20` como espaço literal em busca por
+ * substring — o filtro simplesmente não casa nada (sem erro), fazendo buscas com nome completo
+ * (ex: "Aline Campos") não retornarem resultado algum mesmo quando o valor existe exatamente
+ * assim no diretório.
+ */
 export function escapeFilterValue(value: string): string {
-  return value.replace(/[\\*() ]/g, (c) => `\\${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
+  return value.replace(/[\\*()]/g, (c) => `\\${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
 }
 
 /**
@@ -59,6 +66,11 @@ export function rdnOf(dn: string): string {
 /** Extrai o DN pai (tudo após o primeiro componente), ex: "OU=bar,DC=x" de "CN=foo,OU=bar,DC=x". */
 export function parentOf(dn: string): string {
   return dn.split(",").slice(1).join(",");
+}
+
+/** Extrai só o valor do RDN (folha) de um DN, sem o prefixo do atributo, ex: "TI-Suporte" de "CN=TI-Suporte,OU=...". */
+export function dnLeafLabel(dn: string): string {
+  return rdnOf(dn).replace(/^[A-Za-z]+=/, "");
 }
 
 /** Converte um valor de data no formato AD generalized time (whenCreated etc.) para Date. */

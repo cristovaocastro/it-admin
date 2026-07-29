@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createAdGroupAction } from "@/lib/actions/ad-groups-actions";
+import { listAdConnectionOusAction } from "@/lib/actions/ad-ou-actions";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Plus } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { OuPickerField } from "../ou-picker-field";
+import type { AdOrganizationalUnit } from "@/lib/ad/ou";
 
 const SCOPE_OPTIONS = [
   { value: "Global", label: "Global" },
@@ -30,6 +33,8 @@ const SCOPE_OPTIONS = [
 export function CreateAdGroupDialog({ connectionId, defaultOu }: { connectionId: string; defaultOu?: string | null }) {
   const [open, setOpen] = useState(false);
   const [state, formAction] = useActionState(createAdGroupAction, undefined);
+  const [ous, setOus] = useState<AdOrganizationalUnit[] | null>(null);
+  const [ou, setOu] = useState(defaultOu ?? "");
   const router = useRouter();
 
   useEffect(() => {
@@ -40,6 +45,14 @@ export function CreateAdGroupDialog({ connectionId, defaultOu }: { connectionId:
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.success]);
+
+  useEffect(() => {
+    if (!open || ous !== null) return;
+    listAdConnectionOusAction(connectionId).then((result) => {
+      if (!result.error) setOus(result.ous ?? []);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -68,10 +81,15 @@ export function CreateAdGroupDialog({ connectionId, defaultOu }: { connectionId:
             <Label htmlFor="description">Descrição (opcional)</Label>
             <Input id="description" name="description" />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="ou">OU de destino (opcional)</Label>
-            <Input id="ou" name="ou" defaultValue={defaultOu ?? ""} placeholder="OU=Grupos,DC=empresa,DC=local" />
-          </div>
+          <OuPickerField
+            fieldName="ou"
+            label="OU de destino (opcional)"
+            placeholder="OU=Grupos,DC=empresa,DC=local"
+            selectPlaceholder="Usar a OU padrão de grupos"
+            value={ou}
+            onChange={setOu}
+            options={ous}
+          />
           <div className="space-y-2">
             <Label htmlFor="scope">Escopo</Label>
             <Select name="scope" items={SCOPE_OPTIONS} defaultValue="Global">

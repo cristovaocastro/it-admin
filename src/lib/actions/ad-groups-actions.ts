@@ -12,6 +12,7 @@ import {
   deleteAdGroup,
   getAdGroup,
   moveAdGroup,
+  updateAdGroup,
 } from "@/lib/ad/groups";
 import { withAdErrorHandling } from "@/lib/ad/error-handling";
 
@@ -66,6 +67,46 @@ export async function createAdGroupAction(_prev: ActionState, formData: FormData
   if ("error" in result) return { error: result.error };
   revalidatePath(pathFor(parsed.data.connectionId));
   return { success: "Grupo criado com sucesso." };
+}
+
+const updateSchema = z.object({
+  connectionId: z.string().uuid(),
+  dn: z.string().min(1),
+  label: z.string().min(1),
+  name: z.string().min(1, "Informe o nome do grupo."),
+  description: z.string().optional(),
+});
+
+export async function updateAdGroupAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole(["ADMIN", "OPERATOR"]);
+  const parsed = updateSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+
+  const config = await loadAdConnectionConfig(parsed.data.connectionId);
+  const result = await withAdErrorHandling(() =>
+    updateAdGroup(config, parsed.data.dn, {
+      name: parsed.data.name,
+      description: parsed.data.description ?? "",
+    })
+  );
+
+  await logAudit({
+    actor: { id: actor.id, name: actor.username },
+    action: "ad_group.update",
+    entityType: "AD_GROUP",
+    entityId: parsed.data.dn,
+    entityLabel: parsed.data.label,
+    description:
+      "error" in result
+        ? `Falha ao editar grupo AD "${parsed.data.label}": ${result.error}`
+        : `Grupo AD "${parsed.data.label}" atualizado para "${parsed.data.name}"`,
+    metadata: { connectionId: parsed.data.connectionId },
+    status: "error" in result ? "FAILURE" : "SUCCESS",
+  });
+
+  if ("error" in result) return { error: result.error };
+  revalidatePath(pathFor(parsed.data.connectionId));
+  return { success: "Grupo atualizado." };
 }
 
 export async function getAdGroupMembersAction(connectionId: string, dn: string) {

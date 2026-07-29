@@ -2,18 +2,10 @@ import "server-only";
 import { ListBackupJobsCommand, ListBackupVaultsCommand, ListBackupPlansCommand } from "@aws-sdk/client-backup";
 import { getBackupClient } from "@/lib/aws/client";
 import type { AwsConnectionConfig } from "@/lib/aws/types";
+import type { AwsBackupJob, AwsBackupVault, AwsBackupPlan } from "@/lib/aws/backup-shared";
 
-export type AwsBackupJob = {
-  jobId: string;
-  state: string; // CREATED | PENDING | RUNNING | ABORTING | ABORTED | COMPLETED | FAILED | EXPIRED | PARTIAL
-  resourceType?: string;
-  resourceArn?: string;
-  vaultName?: string;
-  creationDate?: string;
-  completionDate?: string;
-  statusMessage?: string;
-  region: string;
-};
+export type { AwsBackupJob, AwsBackupVault, AwsBackupPlan } from "@/lib/aws/backup-shared";
+export { resourceTypeLabel, resourceDisplayName } from "@/lib/aws/backup-shared";
 
 /** Lista os jobs de backup criados nos últimos `days` dias, em todas as regiões monitoradas. */
 export async function listRecentBackupJobs(config: AwsConnectionConfig, days = 7): Promise<AwsBackupJob[]> {
@@ -34,7 +26,10 @@ export async function listRecentBackupJobs(config: AwsConnectionConfig, days = 7
             state: job.State ?? "UNKNOWN",
             resourceType: job.ResourceType,
             resourceArn: job.ResourceArn,
+            resourceName: job.ResourceName,
             vaultName: job.BackupVaultName,
+            backupPlanId: job.CreatedBy?.BackupPlanId,
+            backupPlanName: job.CreatedBy?.BackupPlanName,
             creationDate: job.CreationDate?.toISOString(),
             completionDate: job.CompletionDate?.toISOString(),
             statusMessage: job.StatusMessage,
@@ -48,9 +43,6 @@ export async function listRecentBackupJobs(config: AwsConnectionConfig, days = 7
   );
   return perRegion.flat().sort((a, b) => (b.creationDate ?? "").localeCompare(a.creationDate ?? ""));
 }
-
-export type AwsBackupVault = { name: string; recoveryPoints: number; region: string };
-export type AwsBackupPlan = { id: string; name: string; region: string };
 
 export async function listBackupVaultsAndPlans(
   config: AwsConnectionConfig

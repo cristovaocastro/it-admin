@@ -75,7 +75,7 @@ export function MoveObjectDialog({
           </div>
         ) : (
           <Select
-            items={Object.fromEntries((ous ?? []).map((o) => [o.dn, o.dn]))}
+            items={Object.fromEntries((ous ?? []).map((o) => [o.dn, o.name]))}
             value={selected || undefined}
             onValueChange={(v) => setSelected(v ?? "")}
           >
@@ -85,7 +85,7 @@ export function MoveObjectDialog({
             <SelectContent>
               {(ous ?? []).map((o) => (
                 <SelectItem key={o.dn} value={o.dn}>
-                  {o.dn}
+                  {o.name}
                 </SelectItem>
               ))}
               {ous && ous.length === 0 && (

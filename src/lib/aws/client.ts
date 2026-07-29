@@ -2,6 +2,7 @@ import "server-only";
 import { EC2Client } from "@aws-sdk/client-ec2";
 import { BackupClient } from "@aws-sdk/client-backup";
 import { CostExplorerClient } from "@aws-sdk/client-cost-explorer";
+import { InvoicingClient } from "@aws-sdk/client-invoicing";
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import { AwsOperationError } from "@/lib/aws/types";
 import type { AwsConnectionConfig, AwsTestResult } from "@/lib/aws/types";
@@ -25,6 +26,19 @@ export function getCostExplorerClient(config: AwsConnectionConfig): CostExplorer
 
 export function getStsClient(config: AwsConnectionConfig): STSClient {
   return new STSClient({ region: config.defaultRegion, credentials: credentials(config) });
+}
+
+/** Invoicing é um serviço global — sempre acessado via us-east-1, como o Cost Explorer. */
+export function getInvoicingClient(config: AwsConnectionConfig): InvoicingClient {
+  return new InvoicingClient({ region: "us-east-1", credentials: credentials(config) });
+}
+
+/** Resolve o Account ID da credencial via STS — a Invoicing API exige o ID da conta como seletor. */
+export async function getAwsAccountId(config: AwsConnectionConfig): Promise<string> {
+  const sts = getStsClient(config);
+  const result = await sts.send(new GetCallerIdentityCommand({}));
+  if (!result.Account) throw new AwsOperationError("Não foi possível determinar o Account ID via STS.");
+  return result.Account;
 }
 
 /** Descreve um erro do AWS SDK v3 de forma amigável, sem vazar detalhes internos do SDK. */

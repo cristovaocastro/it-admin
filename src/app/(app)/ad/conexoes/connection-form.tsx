@@ -19,57 +19,13 @@ import { AlertCircle, CheckCircle2, FolderSearch, Loader2, PlugZap } from "lucid
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { AdConnection } from "@/generated/prisma/client";
 import type { AdOrganizationalUnit } from "@/lib/ad/ou";
+import { OuPickerField } from "../ou-picker-field";
 
 const ENCRYPTION_OPTIONS = [
   { value: "LDAPS", label: "LDAPS (porta 636)" },
   { value: "STARTTLS", label: "StartTLS (porta 389)" },
   { value: "NONE", label: "Nenhuma (não recomendado)" },
 ];
-
-function OuPickerField({
-  fieldName,
-  label,
-  placeholder,
-  value,
-  onChange,
-  options,
-}: {
-  fieldName: string;
-  label: string;
-  placeholder: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: AdOrganizationalUnit[] | null;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={fieldName} className="text-xs text-muted-foreground">
-        {label}
-      </Label>
-      {options && options.length > 0 ? (
-        <Select
-          items={Object.fromEntries(options.map((o) => [o.dn, o.name]))}
-          value={value || undefined}
-          onValueChange={(v) => onChange(v ?? "")}
-        >
-          <SelectTrigger id={fieldName} className="w-full">
-            <SelectValue placeholder="Usar a Base DN" />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((o) => (
-              <SelectItem key={o.dn} value={o.dn}>
-                {o.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : (
-        <Input id={fieldName} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
-      )}
-      <input type="hidden" name={fieldName} value={value} />
-    </div>
-  );
-}
 
 export function ConnectionForm({ connection }: { connection?: AdConnection }) {
   const isEdit = !!connection;

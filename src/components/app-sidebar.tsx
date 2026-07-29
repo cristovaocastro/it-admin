@@ -21,6 +21,12 @@ import {
   DatabaseBackup,
   Waypoints,
   CircleDollarSign,
+  Database,
+  HardDrive,
+  Bug,
+  ShieldAlert,
+  PackagePlus,
+  HeartPulse,
 } from "lucide-react";
 
 type NavItem = {
@@ -63,6 +69,18 @@ const NAV: NavGroup[] = [
     ],
   },
   {
+    title: "ANTIVÍRUS",
+    items: [
+      { href: "/bitdefender/saude", label: "Saúde", icon: HeartPulse, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/bitdefender/conexoes", label: "Conexões", icon: Cloud, roles: ["ADMIN"] },
+      { href: "/bitdefender/endpoints", label: "Endpoints", icon: Monitor, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/bitdefender/quarentena", label: "Quarentena", icon: Bug, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/bitdefender/politicas", label: "Políticas", icon: ShieldCheck, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/bitdefender/instalacao", label: "Instalação", icon: PackagePlus, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/bitdefender/incidentes", label: "Incidentes (EDR)", icon: ShieldAlert, roles: ["ADMIN", "OPERATOR"] },
+    ],
+  },
+  {
     title: "AWS",
     items: [
       { href: "/aws/conexoes", label: "Conexões", icon: Cloud, roles: ["ADMIN"] },
@@ -70,6 +88,17 @@ const NAV: NavGroup[] = [
       { href: "/aws/backup", label: "Backup", icon: DatabaseBackup, roles: ["ADMIN", "OPERATOR"] },
       { href: "/aws/rede", label: "Rede (VPC/VPN)", icon: Waypoints, roles: ["ADMIN", "OPERATOR"] },
       { href: "/aws/custos", label: "Custos", icon: CircleDollarSign, roles: ["ADMIN", "OPERATOR"] },
+    ],
+  },
+  {
+    title: "OCI",
+    items: [
+      { href: "/oci/conexoes", label: "Conexões", icon: Cloud, roles: ["ADMIN"] },
+      { href: "/oci/instancias", label: "Instâncias", icon: Server, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/oci/banco-de-dados", label: "Bancos de dados", icon: Database, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/oci/block-storage", label: "Block Storage", icon: HardDrive, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/oci/backup", label: "Backup", icon: DatabaseBackup, roles: ["ADMIN", "OPERATOR"] },
+      { href: "/oci/custos", label: "Custos", icon: CircleDollarSign, roles: ["ADMIN", "OPERATOR"] },
     ],
   },
 ];

@@ -6,23 +6,11 @@ import { listRecentBackupJobs, listBackupVaultsAndPlans } from "@/lib/aws/backup
 import { AwsOperationError } from "@/lib/aws/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, Cloud } from "lucide-react";
 import { AwsConnectionPicker } from "../connection-picker";
+import { BackupJobsExplorer } from "./backup-jobs-explorer";
 
 type SearchParams = { conexao?: string };
-
-const STATE_VARIANT: Record<string, "secondary" | "destructive" | "outline"> = {
-  COMPLETED: "secondary",
-  RUNNING: "outline",
-  PENDING: "outline",
-  CREATED: "outline",
-  FAILED: "destructive",
-  ABORTED: "destructive",
-  EXPIRED: "destructive",
-  PARTIAL: "destructive",
-};
 
 export default async function AwsBackupPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requireRole(["ADMIN", "OPERATOR"]);
@@ -126,51 +114,7 @@ export default async function AwsBackupPage({ searchParams }: { searchParams: Pr
             </Card>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Jobs recentes</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Recurso</TableHead>
-                    <TableHead>Cofre</TableHead>
-                    <TableHead>Região</TableHead>
-                    <TableHead>Criado em</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {jobs.map((j) => (
-                    <TableRow key={j.jobId}>
-                      <TableCell className="max-w-[280px] truncate text-muted-foreground" title={j.resourceArn}>
-                        {j.resourceType ?? "—"}
-                        {j.resourceArn && <div className="truncate text-xs">{j.resourceArn}</div>}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{j.vaultName ?? "—"}</TableCell>
-                      <TableCell className="text-muted-foreground">{j.region}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {j.creationDate ? new Date(j.creationDate).toLocaleString("pt-BR") : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATE_VARIANT[j.state] ?? "outline"} title={j.statusMessage}>
-                          {j.state}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {jobs.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                        Nenhum job de backup nos últimos 7 dias.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <BackupJobsExplorer jobs={jobs} plans={vaultsAndPlans.plans} />
         </>
       )}
     </div>

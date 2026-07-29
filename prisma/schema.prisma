@@ -61,6 +61,8 @@ model User {
   adConnections  AdConnection[]     @relation("AdConnectionCreatedBy")
   firewallConnections FirewallConnection[] @relation("FirewallConnectionCreatedBy")
   awsConnections AwsConnection[]    @relation("AwsConnectionCreatedBy")
+  ociConnections OciConnection[]    @relation("OciConnectionCreatedBy")
+  bitdefenderConnections BitdefenderConnection[] @relation("BitdefenderConnectionCreatedBy")
 
   @@index([status])
   @@map("users")
@@ -123,6 +125,14 @@ enum AuditEntityType {
   FIREWALL_URI_LIST
   AWS_CONNECTION
   AWS_EC2_INSTANCE
+  OCI_CONNECTION
+  OCI_INSTANCE
+  BITDEFENDER_CONNECTION
+  BITDEFENDER_ENDPOINT
+  BITDEFENDER_QUARANTINE_ITEM
+  BITDEFENDER_POLICY
+  BITDEFENDER_INSTALL_PACKAGE
+  BITDEFENDER_INCIDENT
   SYSTEM
 }
 
@@ -270,4 +280,79 @@ model AwsConnection {
   updatedAt   DateTime @updatedAt
 
   @@map("aws_connections")
+}
+
+// ---------------------------------------------------------------------------
+// OCI (Oracle Cloud Infrastructure) — tenancies gerenciadas pelo painel
+// (instâncias de computação, bancos de dados, block storage, backups)
+// ---------------------------------------------------------------------------
+
+enum OciTestStatus {
+  NEVER_TESTED
+  SUCCESS
+  FAILURE
+}
+
+model OciConnection {
+  id   String @id @default(uuid())
+  name String @unique // nome amigável, ex: "OCI Produção"
+
+  tenancyId   String // OCID da tenancy
+  userId      String // OCID do usuário usado para autenticar (API Signing Key)
+  fingerprint String // fingerprint da chave pública cadastrada no usuário OCI
+
+  privateKeyEncrypted String // chave privada (PEM) usada para assinar as requisições, AES-256-GCM
+  passphraseEncrypted String? // senha da chave privada, se houver, AES-256-GCM
+
+  defaultRegion String   // usada por chamadas que exigem uma única região (ex: teste de conexão)
+  regions       String[] // regiões monitoradas
+  compartments  String[] // OCIDs dos compartments monitorados (recursos da OCI são organizados por compartment, não só por região)
+
+  isActive Boolean @default(true)
+
+  lastTestAt        DateTime?
+  lastTestStatus    OciTestStatus @default(NEVER_TESTED)
+  lastTestError     String?
+  lastTestLatencyMs Int?
+
+  createdById String?
+  createdBy   User?    @relation("OciConnectionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("oci_connections")
+}
+
+// ---------------------------------------------------------------------------
+// Bitdefender GravityZone — antivírus/EDR gerenciado pelo painel
+// (endpoints, quarentena, políticas, instalação remota, incidentes EDR)
+// ---------------------------------------------------------------------------
+
+enum BitdefenderTestStatus {
+  NEVER_TESTED
+  SUCCESS
+  FAILURE
+}
+
+model BitdefenderConnection {
+  id   String @id @default(uuid())
+  name String @unique // nome amigável, ex: "GravityZone Matriz"
+
+  apiUrl          String // URL base da API (mostrada no Control Center junto com a chave), ex: https://cloud.gravityzone.bitdefender.com
+  apiKeyEncrypted String // API Key usada como usuário no Basic Auth, criptografada (AES-256-GCM)
+  companyId       String? // opcional, só necessário em setups MSP/multi-empresa
+
+  isActive Boolean @default(true)
+
+  lastTestAt        DateTime?
+  lastTestStatus    BitdefenderTestStatus @default(NEVER_TESTED)
+  lastTestError     String?
+  lastTestLatencyMs Int?
+
+  createdById String?
+  createdBy   User?    @relation("BitdefenderConnectionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("bitdefender_connections")
 }
