@@ -4,6 +4,7 @@ import { requireUser, hasAtLeastRole } from "@/lib/auth/guards";
 import { db } from "@/lib/db";
 import { getAdHealthStats } from "@/lib/ad/health";
 import { getAwsHealthStats } from "@/lib/aws/health";
+import { getBitdefenderHealthStats } from "@/lib/bitdefender/health";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -29,6 +30,7 @@ import {
   DatabaseBackup,
   CircleDollarSign,
   Waypoints,
+  Bug,
 } from "lucide-react";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -62,6 +64,7 @@ export default async function DashboardPage() {
     firewallConnectionCount,
     firewallByStatus,
     awsConnectionCount,
+    bitdefenderConnectionCount,
     recentLogs,
     auditLast24h,
     auditFailuresLast24h,
@@ -76,6 +79,7 @@ export default async function DashboardPage() {
       ? db.firewallConnection.groupBy({ by: ["lastTestStatus"], where: { isActive: true }, _count: { _all: true } })
       : Promise.resolve(null),
     canSeePanelStats ? db.awsConnection.count({ where: { isActive: true } }) : Promise.resolve(null),
+    canSeePanelStats ? db.bitdefenderConnection.count({ where: { isActive: true } }) : Promise.resolve(null),
     db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 8 }),
     db.auditLog.count({ where: { createdAt: { gte: dayAgo } } }),
     db.auditLog.count({ where: { createdAt: { gte: dayAgo }, status: "FAILURE" } }),
@@ -105,6 +109,14 @@ export default async function DashboardPage() {
         )}
         {canSeePanelStats && (
           <StatCard title="Conexões AWS ativas" value={awsConnectionCount ?? 0} icon={Cloud} href="/aws/conexoes" />
+        )}
+        {canSeePanelStats && (
+          <StatCard
+            title="Conexões Bitdefender ativas"
+            value={bitdefenderConnectionCount ?? 0}
+            icon={ShieldCheck}
+            href="/bitdefender/conexoes"
+          />
         )}
         <StatCard title="Eventos de auditoria (24h)" value={auditLast24h} icon={ScrollText} href="/auditoria" />
       </div>
@@ -150,6 +162,10 @@ export default async function DashboardPage() {
 
       <Suspense fallback={<AwsHealthFallback />}>
         <AwsHealthSection />
+      </Suspense>
+
+      <Suspense fallback={<BitdefenderHealthFallback />}>
+        <BitdefenderHealthSection />
       </Suspense>
 
       {canSeePanelStats && firewallByStatus && firewallConnectionCount !== null && firewallConnectionCount > 0 && (
@@ -360,6 +376,83 @@ async function AwsHealthSection() {
             tone={awsHealth.endpointsUnavailable > 0 ? "warning" : undefined}
           />
           <StatCard title="Ver custos detalhados" icon={CircleDollarSign} href="/aws/custos" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BitdefenderHealthFallback() {
+  return (
+    <div>
+      <h2 className="mb-3 text-sm font-medium text-muted-foreground">Saúde do Bitdefender GravityZone</h2>
+      <div className="flex items-center gap-2 rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        Consultando o GravityZone...
+      </div>
+    </div>
+  );
+}
+
+async function BitdefenderHealthSection() {
+  const bitdefenderConnections = await db.bitdefenderConnection.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true },
+  });
+  if (bitdefenderConnections.length === 0) return null;
+  const bdHealth = await getBitdefenderHealthStats(bitdefenderConnections);
+
+  return (
+    <div className="space-y-3">
+      {bdHealth.connectionErrors.length > 0 && (
+        <Alert variant="destructive">
+          <AlertTriangle className="size-4" />
+          <AlertTitle>Falha ao consultar o GravityZone</AlertTitle>
+          <AlertDescription>
+            Não foi possível obter indicadores de: {bdHealth.connectionErrors.join(", ")}. Os números abaixo podem
+            estar incompletos.
+          </AlertDescription>
+        </Alert>
+      )}
+      <div>
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+          Saúde do Bitdefender GravityZone ({bdHealth.totalEndpoints} endpoint(s))
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Sem agente instalado"
+            value={bdHealth.unmanagedEndpoints}
+            icon={MonitorOff}
+            href="/bitdefender/endpoints"
+            tone={bdHealth.unmanagedEndpoints > 0 ? "warning" : undefined}
+          />
+          <StatCard
+            title="Endpoints infectados"
+            value={bdHealth.infectedEndpoints}
+            icon={Bug}
+            href="/bitdefender/endpoints"
+            tone={bdHealth.infectedEndpoints > 0 ? "warning" : undefined}
+          />
+          <StatCard
+            title="Endpoints isolados"
+            value={bdHealth.isolatedEndpoints}
+            icon={ShieldAlert}
+            href="/bitdefender/endpoints"
+            tone={bdHealth.isolatedEndpoints > 0 ? "warning" : undefined}
+          />
+          <StatCard
+            title="Itens em quarentena"
+            value={bdHealth.quarantineItems}
+            icon={Bug}
+            href="/bitdefender/quarentena"
+          />
+          <StatCard
+            title="Incidentes ativos (EDR)"
+            value={bdHealth.activeIncidents}
+            icon={ShieldAlert}
+            href="/bitdefender/incidentes"
+            tone={bdHealth.activeIncidents > 0 ? "warning" : undefined}
+          />
         </div>
       </div>
     </div>
